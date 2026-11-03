@@ -1,0 +1,68 @@
+name: legacy-migration-strangler
+
+services:
+  elasticmq:
+    image: softwaremill/elasticmq-native:1.6.12
+    restart: unless-stopped
+    ports:
+      - "${SQS_PORT:-9324}:9324"
+      - "${SQS_UI_PORT:-9325}:9325"
+    volumes:
+      - ./infra/elasticmq/elasticmq.conf:/opt/elasticmq.conf:ro
+
+  legacy-db:
+    image: mariadb:10.11
+    restart: unless-stopped
+    environment:
+      MARIADB_ROOT_PASSWORD: ${LEGACY_DB_ROOT_PASSWORD}
+      MARIADB_DATABASE: ${LEGACY_DB_NAME}
+      MARIADB_USER: ${LEGACY_DB_USER}
+      MARIADB_PASSWORD: ${LEGACY_DB_PASSWORD}
+    ports:
+      - "${LEGACY_DB_PORT:-3307}:3306"
+    volumes:
+      - legacy-db-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  legacy:
+    build: ./legacy-service
+    restart: unless-stopped
+    environment:
+      CI_ENV: ${LEGACY_CI_ENV:-development}
+      LEGACY_DB_HOST: legacy-db
+      LEGACY_DB_NAME: ${LEGACY_DB_NAME}
+      LEGACY_DB_USER: ${LEGACY_DB_USER}
+      LEGACY_DB_PASSWORD: ${LEGACY_DB_PASSWORD}
+      SQS_ENDPOINT: http://elasticmq:9324
+    ports:
+      - "${LEGACY_PORT:-8080}:80"
+    depends_on:
+      legacy-db:
+        condition: service_healthy
+      elasticmq:
+        condition: service_started
+
+  new-db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${NEW_DB_USER}
+      POSTGRES_PASSWORD: ${NEW_DB_PASSWORD}
+      POSTGRES_DB: ${NEW_DB_NAME}
+    ports:
+      - "${NEW_DB_PORT:-5433}:5432"
+    volumes:
+      - new-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${NEW_DB_USER} -d ${NEW_DB_NAME}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  legacy-db-data:
+  new-db-data:

@@ -1,0 +1,14 @@
+{
+  "name": "legacy-migration-strangler",
+  "private": true,
+  "packageManager": "pnpm@10.34.5",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "infra:up": "docker compose up -d --wait",
+    "infra:down": "docker compose down",
+    "test:contract:legacy": "TARGET_URL=http://localhost:8080 pnpm --filter contract-tests test",
+    "test:contract:new": "TARGET_URL=http://localhost:3000 pnpm --filter contract-tests test"
+  }
+}

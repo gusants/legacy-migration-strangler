@@ -1,0 +1,17 @@
+node_modules
+dist
+coverage
+*.tsbuildinfo
+
+.env
+.env.*
+!.env.example
+
+_local
+
+.terraform
+*.tfstate
+*.tfstate.*
+
+.DS_Store
+*.log

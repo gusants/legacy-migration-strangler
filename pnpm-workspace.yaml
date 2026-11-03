@@ -1,0 +1,5 @@
+packages:
+  - new-service
+  - contract-tests
+  - router
+  - comparator
