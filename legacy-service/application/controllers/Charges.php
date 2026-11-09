@@ -11,6 +11,47 @@ class Charges extends CI_Controller {
 		$body = $this->input->raw_input_stream;
 		$dados = json_decode($body, true);
 
+		$ok = true;
+		if (!is_array($dados)) {
+			$ok = false;
+		} else {
+			if (!isset($dados['messageId']) || !is_string($dados['messageId']) || trim($dados['messageId']) == '' || strlen($dados['messageId']) > 128) {
+				$ok = false;
+			}
+			if (!isset($dados['chargeId']) || !is_string($dados['chargeId']) || trim($dados['chargeId']) == '' || strlen($dados['chargeId']) > 128) {
+				$ok = false;
+			}
+			if (!isset($dados['amountCents']) || !is_int($dados['amountCents']) || $dados['amountCents'] <= 0) {
+				$ok = false;
+			}
+			foreach (array('dueDate', 'referenceDate') as $campo) {
+				if (!isset($dados[$campo]) || !is_string($dados[$campo])) {
+					$ok = false;
+				} else {
+					$d = DateTime::createFromFormat('!Y-m-d', $dados[$campo], new DateTimeZone('UTC'));
+					if (!$d || $d->format('Y-m-d') !== $dados[$campo]) {
+						$ok = false;
+					}
+				}
+			}
+			if (!isset($dados['paid']) || !is_bool($dados['paid'])) {
+				$ok = false;
+			}
+			if (!isset($dados['planType']) || ($dados['planType'] !== 'monthly' && $dados['planType'] !== 'yearly')) {
+				$ok = false;
+			}
+			if (!isset($dados['failedAttempts']) || !is_int($dados['failedAttempts']) || $dados['failedAttempts'] < 0) {
+				$ok = false;
+			}
+		}
+		if (!$ok) {
+			$this->output
+				->set_status_header(400)
+				->set_content_type('application/json')
+				->set_output(json_encode(array('error' => 'invalid_payload')));
+			return;
+		}
+
 		$ja = $this->db->get_where('charge_results', array('message_id' => $dados['messageId']))->row_array();
 		if ($ja) {
 			$this->output
