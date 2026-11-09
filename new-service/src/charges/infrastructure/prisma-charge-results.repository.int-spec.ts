@@ -42,7 +42,7 @@ describe('PrismaChargeResultsRepository', () => {
       env: { ...process.env, DATABASE_URL: databaseUrl },
       stdio: 'pipe',
     });
-    prisma = new PrismaService({ PORT: 0, DATABASE_URL: databaseUrl });
+    prisma = new PrismaService({ DATABASE_URL: databaseUrl });
     repository = new PrismaChargeResultsRepository(prisma);
   });
 

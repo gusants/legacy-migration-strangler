@@ -107,11 +107,19 @@ services:
     environment:
       PORT: 3000
       DATABASE_URL: postgresql://${NEW_DB_USER}:${NEW_DB_PASSWORD}@new-db:5432/${NEW_DB_NAME}
+      SQS_CONSUMER_ENABLED: "true"
+      SQS_ENDPOINT: http://elasticmq:9324
+      NEW_QUEUE_URL: http://elasticmq:9324/000000000000/charges-new
+      AWS_REGION: us-east-1
+      AWS_ACCESS_KEY_ID: local
+      AWS_SECRET_ACCESS_KEY: local
     ports:
       - "${NEW_PORT:-3000}:3000"
     depends_on:
       new-db:
         condition: service_healthy
+      elasticmq:
+        condition: service_started
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/health"]
       interval: 5s

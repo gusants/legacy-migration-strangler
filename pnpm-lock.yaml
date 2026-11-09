@@ -25,6 +25,9 @@ importers:
 
   new-service:
     dependencies:
+      '@aws-sdk/client-sqs':
+        specifier: ^3.1165.0
+        version: 3.1165.0
       '@date-fns/tz':
         specifier: ^1.5.0
         version: 1.5.0
