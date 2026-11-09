@@ -8,7 +8,7 @@ describe('decideRoute', () => {
   it('sends everything to the legacy queue in legacy mode', () => {
     expect(decideRoute(message, { mode: 'legacy' })).toEqual({
       mode: 'legacy',
-      targets: ['legacy'],
+      targets: [{ queue: 'legacy', role: 'primary' }],
     });
   });
 

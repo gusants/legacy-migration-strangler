@@ -1,15 +1,17 @@
 import type { SQSBatchResponse, SQSEvent, SQSRecord } from 'aws-lambda';
 import type { Logger } from './logging/logger.js';
 import type { OutgoingMessage, QueueSender } from './queue/queue-sender.js';
-import { decideRoute, type QueueTarget, type RoutingDecision } from './routing/decide-route.js';
+import type { QueueTarget, RouteTarget, RoutingDecision } from './routing/decide-route.js';
 import { parseRoutableMessage } from './routing/parse-routable-message.js';
 import type { RoutableMessage } from './routing/routable-message.js';
+import type { RoutePlanner } from './routing/route-planner.js';
 import type { RoutingConfig, RoutingConfigProvider } from './routing/routing-config.js';
 
 const SEND_BATCH_LIMIT = 10;
 
 export type HandlerDependencies = {
   configProvider: RoutingConfigProvider;
+  planner: RoutePlanner;
   sender: QueueSender;
   queueUrls: Record<QueueTarget, string>;
   logger: Logger;
@@ -19,7 +21,7 @@ type Dispatch = {
   record: SQSRecord;
   message: RoutableMessage;
   decision: RoutingDecision;
-  target: QueueTarget;
+  target: RouteTarget;
   outgoing: OutgoingMessage;
 };
 
@@ -36,6 +38,7 @@ const toOutgoing = (
   record: SQSRecord,
   message: RoutableMessage,
   decision: RoutingDecision,
+  target: RouteTarget,
 ): OutgoingMessage => ({
   id: String(index),
   body: record.body,
@@ -43,6 +46,7 @@ const toOutgoing = (
     messageId: message.messageId,
     chargeId: message.chargeId,
     routingMode: decision.mode,
+    ...(target.role === 'shadow' && { shadow: 'true' }),
   },
 });
 
@@ -50,25 +54,25 @@ const toBatchResponse = (records: readonly SQSRecord[]): SQSBatchResponse => ({
   batchItemFailures: records.map((record) => ({ itemIdentifier: record.messageId })),
 });
 
-export const createHandler = ({ configProvider, sender, queueUrls, logger }: HandlerDependencies) => {
-  const planRecord = (
+export const createHandler = ({ configProvider, planner, sender, queueUrls, logger }: HandlerDependencies) => {
+  const planRecord = async (
     record: SQSRecord,
     index: number,
     config: RoutingConfig,
-  ): Dispatch[] | undefined => {
+  ): Promise<Dispatch[] | undefined> => {
     const message = parseRoutableMessage(record.body);
     if (!message) {
       logger.error({ event: 'invalid_message', sqsMessageId: record.messageId });
       return undefined;
     }
     try {
-      const decision = decideRoute(message, config);
+      const decision = await planner.plan(message, config);
       return decision.targets.map((target) => ({
         record,
         message,
         decision,
         target,
-        outgoing: toOutgoing(index, record, message, decision),
+        outgoing: toOutgoing(index, record, message, decision, target),
       }));
     } catch (error) {
       logger.error({ event: 'routing_failed', ...message, error: errorText(error) });
@@ -77,7 +81,18 @@ export const createHandler = ({ configProvider, sender, queueUrls, logger }: Han
   };
 
   const logRouted = ({ message, decision, target }: Dispatch): void =>
-    logger.info({ event: 'routed', ...message, mode: decision.mode, destination: target });
+    logger.info({
+      event: 'routed',
+      ...message,
+      mode: decision.mode,
+      destination: target.queue,
+      role: target.role,
+    });
+
+  const logShadowFailure = ({ message, target }: Dispatch): void =>
+    logger.error({ event: 'shadow_send_failed', ...message, destination: target.queue });
+
+  const isShadow = ({ target }: Dispatch): boolean => target.role === 'shadow';
 
   const sendChunk = async (target: QueueTarget, dispatches: Dispatch[]): Promise<Dispatch[]> => {
     try {
@@ -102,7 +117,7 @@ export const createHandler = ({ configProvider, sender, queueUrls, logger }: Han
   };
 
   const groupByTarget = (dispatches: Dispatch[]): Map<QueueTarget, Dispatch[]> =>
-    Map.groupBy(dispatches, ({ target }) => target);
+    Map.groupBy(dispatches, ({ target }) => target.queue);
 
   return async (event: SQSEvent): Promise<SQSBatchResponse> => {
     let config: RoutingConfig;
@@ -113,17 +128,21 @@ export const createHandler = ({ configProvider, sender, queueUrls, logger }: Han
       return toBatchResponse(event.Records);
     }
 
-    const plans = event.Records.map((record, index) => ({
-      record,
-      dispatches: planRecord(record, index, config),
-    }));
+    const plans = await Promise.all(
+      event.Records.map(async (record, index) => ({
+        record,
+        dispatches: await planRecord(record, index, config),
+      })),
+    );
     const unroutable = plans.filter(({ dispatches }) => !dispatches).map(({ record }) => record);
     const dispatches = plans.flatMap(({ dispatches }) => dispatches ?? []);
 
     const failedPerTarget = await Promise.all(
       [...groupByTarget(dispatches)].map(([target, group]) => sendToTarget(target, group)),
     );
-    const failedRecords = failedPerTarget.flat().map(({ record }) => record);
+    const failed = failedPerTarget.flat();
+    failed.filter(isShadow).forEach(logShadowFailure);
+    const failedRecords = failed.filter((dispatch) => !isShadow(dispatch)).map(({ record }) => record);
 
     return toBatchResponse([...new Set([...unroutable, ...failedRecords])]);
   };

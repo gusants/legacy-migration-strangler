@@ -2,6 +2,9 @@ import type { SQSEvent, SQSRecord } from 'aws-lambda';
 import { createHandler } from './handler.js';
 import type { LogFields, Logger } from './logging/logger.js';
 import type { OutgoingMessage, QueueSender } from './queue/queue-sender.js';
+import type { RoutingDecision } from './routing/decide-route.js';
+import { pureRoutePlanner } from './routing/pure-route-planner.js';
+import type { RoutePlanner } from './routing/route-planner.js';
 import type { RoutingConfig, RoutingConfigProvider } from './routing/routing-config.js';
 
 const QUEUE_URLS = { legacy: 'http://q/legacy', new: 'http://q/new' };
@@ -27,6 +30,7 @@ type Sent = { queueUrl: string; messages: readonly OutgoingMessage[] };
 const buildHandler = (options: {
   config?: RoutingConfig | Error;
   sendBatch?: QueueSender['sendBatch'];
+  planner?: RoutePlanner;
 } = {}) => {
   const sent: Sent[] = [];
   const logs: { level: 'info' | 'error'; fields: LogFields }[] = [];
@@ -49,7 +53,7 @@ const buildHandler = (options: {
     info: (fields) => logs.push({ level: 'info', fields }),
     error: (fields) => logs.push({ level: 'error', fields }),
   };
-  const handler = createHandler({ configProvider, sender, queueUrls: QUEUE_URLS, logger });
+  const handler = createHandler({ configProvider, planner: options.planner ?? pureRoutePlanner, sender, queueUrls: QUEUE_URLS, logger });
   return { handler, sent, logs };
 };
 
@@ -76,7 +80,7 @@ describe('router handler', () => {
     expect(logs).toEqual([
       {
         level: 'info',
-        fields: { event: 'routed', messageId: 'm1', chargeId: 'c1', mode: 'legacy', destination: 'legacy' },
+        fields: { event: 'routed', messageId: 'm1', chargeId: 'c1', mode: 'legacy', destination: 'legacy', role: 'primary' },
       },
     ]);
   });
@@ -173,5 +177,89 @@ describe('router handler', () => {
       level: 'error',
       fields: { event: 'routing_failed', messageId: 'm1', chargeId: 'c1', error: 'routing mode "new" is not implemented' },
     });
+  });
+
+  describe('with a shadow copy', () => {
+    const shadowDecision: RoutingDecision = {
+      mode: 'shadow',
+      targets: [
+        { queue: 'legacy', role: 'primary' },
+        { queue: 'new', role: 'shadow' },
+      ],
+    };
+    const shadowPlanner: RoutePlanner = { plan: async () => shadowDecision };
+
+    it('marks only the shadow copy with the shadow attribute', async () => {
+      const { handler, sent } = buildHandler({ planner: shadowPlanner });
+
+      const response = await handler(eventOf(record(1)));
+
+      expect(response.batchItemFailures).toEqual([]);
+      const attributesByQueue = Object.fromEntries(
+        sent.map(({ queueUrl, messages }) => [queueUrl, messages[0]?.attributes]),
+      );
+      expect(attributesByQueue).toEqual({
+        [QUEUE_URLS.legacy]: { messageId: 'm1', chargeId: 'c1', routingMode: 'shadow' },
+        [QUEUE_URLS.new]: { messageId: 'm1', chargeId: 'c1', routingMode: 'shadow', shadow: 'true' },
+      });
+    });
+
+    it('does not fail the official message when only the shadow send is rejected', async () => {
+      const { handler, logs } = buildHandler({
+        planner: shadowPlanner,
+        sendBatch: async (queueUrl) => ({ failedIds: queueUrl === QUEUE_URLS.new ? ['0'] : [] }),
+      });
+
+      const response = await handler(eventOf(record(1)));
+
+      expect(response.batchItemFailures).toEqual([]);
+      expect(logs).toContainEqual({
+        level: 'error',
+        fields: { event: 'shadow_send_failed', messageId: 'm1', chargeId: 'c1', destination: 'new' },
+      });
+      expect(logs).toContainEqual({
+        level: 'info',
+        fields: { event: 'routed', messageId: 'm1', chargeId: 'c1', mode: 'shadow', destination: 'legacy', role: 'primary' },
+      });
+    });
+
+    it('does not fail the official message when the shadow send throws', async () => {
+      const { handler } = buildHandler({
+        planner: shadowPlanner,
+        sendBatch: async (queueUrl) => {
+          if (queueUrl === QUEUE_URLS.new) throw new Error('new queue down');
+          return { failedIds: [] };
+        },
+      });
+
+      await expect(handler(eventOf(record(1)))).resolves.toEqual({ batchItemFailures: [] });
+    });
+
+    it('fails the record when the primary send is rejected, even if the shadow copy went through', async () => {
+      const { handler, logs } = buildHandler({
+        planner: shadowPlanner,
+        sendBatch: async (queueUrl) => ({ failedIds: queueUrl === QUEUE_URLS.legacy ? ['0'] : [] }),
+      });
+
+      const response = await handler(eventOf(record(1)));
+
+      expect(response.batchItemFailures).toEqual([{ itemIdentifier: 'sqs-1' }]);
+      expect(logs.some(({ fields }) => fields.event === 'shadow_send_failed')).toBe(false);
+    });
+  });
+
+  it('plans each record through an asynchronous planner', async () => {
+    const delayedPlanner: RoutePlanner = {
+      plan: async (message, config) => {
+        await new Promise((resolve) => setTimeout(resolve, 1));
+        return pureRoutePlanner.plan(message, config);
+      },
+    };
+    const { handler, sent } = buildHandler({ planner: delayedPlanner });
+
+    const response = await handler(eventOf(record(1), record(2)));
+
+    expect(response.batchItemFailures).toEqual([]);
+    expect(sent[0]?.messages.map(({ id }) => id)).toEqual(['0', '1']);
   });
 });

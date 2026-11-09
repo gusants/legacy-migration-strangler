@@ -7,6 +7,7 @@ import type { Logger } from '../logging/logger.js';
 import { SqsQueueConsumer } from '../queue/sqs-queue-consumer.js';
 import { SqsQueueSender } from '../queue/sqs-queue-sender.js';
 import { FileRoutingConfigProvider } from '../routing/file-routing-config-provider.js';
+import { pureRoutePlanner } from '../routing/pure-route-planner.js';
 import {
   startElasticMq,
   type ElasticMqTestEnvironment,
@@ -52,6 +53,7 @@ const buildDependencies = (
     consumer: new SqsQueueConsumer(queues.client),
     handler: createHandler({
       configProvider: new FileRoutingConfigProvider(routingPath),
+      planner: pureRoutePlanner,
       sender: new SqsQueueSender(queues.client),
       queueUrls: { legacy: queues.queueUrl('charges-legacy'), new: queues.queueUrl('charges-new') },
       logger,

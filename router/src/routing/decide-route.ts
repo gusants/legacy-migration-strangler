@@ -4,9 +4,16 @@ import { UnsupportedRoutingModeError } from './routing-errors.js';
 
 export type QueueTarget = 'legacy' | 'new';
 
+export type TargetRole = 'primary' | 'shadow';
+
+export type RouteTarget = {
+  queue: QueueTarget;
+  role: TargetRole;
+};
+
 export type RoutingDecision = {
   mode: RoutingMode;
-  targets: readonly QueueTarget[];
+  targets: readonly RouteTarget[];
 };
 
 export const decideRoute = (
@@ -15,7 +22,7 @@ export const decideRoute = (
 ): RoutingDecision => {
   switch (config.mode) {
     case 'legacy':
-      return { mode: 'legacy', targets: ['legacy'] };
+      return { mode: 'legacy', targets: [{ queue: 'legacy', role: 'primary' }] };
     case 'shadow':
     case 'percentage':
     case 'new':
