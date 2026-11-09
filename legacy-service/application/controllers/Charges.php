@@ -11,6 +11,21 @@ class Charges extends CI_Controller {
 		$body = $this->input->raw_input_stream;
 		$dados = json_decode($body, true);
 
+		$ja = $this->db->get_where('charge_results', array('message_id' => $dados['messageId']))->row_array();
+		if ($ja) {
+			$this->output
+				->set_content_type('application/json')
+				->set_output(json_encode(array(
+					'chargeId' => $ja['charge_id'],
+					'status' => $ja['status'],
+					'daysLate' => (int) $ja['days_late'],
+					'fineCents' => (int) $ja['fine_cents'],
+					'interestCents' => (int) $ja['interest_cents'],
+					'totalCents' => (int) $ja['total_cents']
+				)));
+			return;
+		}
+
 		$valor = $dados['amountCents'] / 100;
 		$venc = strtotime($dados['dueDate'] . ' 00:00:00 UTC');
 		$ref = strtotime($dados['referenceDate'] . ' 00:00:00 UTC');
@@ -58,7 +73,7 @@ class Charges extends CI_Controller {
 			'totalCents' => (int) round($total * 100)
 		);
 
-		$this->db->insert('charge_results', array(
+		$sql = $this->db->insert_string('charge_results', array(
 			'message_id' => $dados['messageId'],
 			'charge_id' => $resultado['chargeId'],
 			'status' => $resultado['status'],
@@ -68,6 +83,19 @@ class Charges extends CI_Controller {
 			'total_cents' => $resultado['totalCents'],
 			'payload' => $body
 		));
+		$this->db->query(str_replace('INSERT INTO', 'INSERT IGNORE INTO', $sql));
+
+		if ($this->db->affected_rows() == 0) {
+			$ja = $this->db->get_where('charge_results', array('message_id' => $dados['messageId']))->row_array();
+			$resultado = array(
+				'chargeId' => $ja['charge_id'],
+				'status' => $ja['status'],
+				'daysLate' => (int) $ja['days_late'],
+				'fineCents' => (int) $ja['fine_cents'],
+				'interestCents' => (int) $ja['interest_cents'],
+				'totalCents' => (int) $ja['total_cents']
+			);
+		}
 
 		$this->output
 			->set_content_type('application/json')
