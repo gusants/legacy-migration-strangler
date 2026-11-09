@@ -159,8 +159,20 @@ jobs:
           cp .env.example .env
           docker compose up -d --build --wait elasticmq legacy-db legacy legacy-worker router
 
-      - name: Produce messages and verify no loss or duplication
-        run: pnpm verify:flow --count 300 --timeout 120
+      - name: Wait for the queues to exist
+        run: |
+          for attempt in $(seq 1 30); do
+            if curl -fsS "http://localhost:9324/?Action=ListQueues" | grep -q "charges-legacy-dlq"; then
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "elasticmq did not expose the queues" >&2
+          exit 1
+
+      # 3 invalid messages need 5 receives x 30 s visibility to reach charges-incoming-dlq (about 3 min)
+      - name: Produce messages and verify no loss, no duplication and dead-lettering
+        run: pnpm verify:flow --count 300 --invalid 3 --timeout 300
 
       - name: Service logs
         if: failure()
