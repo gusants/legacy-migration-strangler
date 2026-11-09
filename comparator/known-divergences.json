@@ -1,0 +1,42 @@
+[
+  {
+    "id": "L1",
+    "description": "Legacy float arithmetic drifts one cent on interest for amounts above 1e13 cents; the new service uses exact integer math. Unreachable while C1 rejects amounts above 1e12 in the new service, kept so the entry applies if that cap is ever lifted.",
+    "scope": "field",
+    "affectedRules": ["R4/R5", "total"],
+    "explains": ["interestCents", "totalCents"],
+    "when": {
+      "all": [
+        { "op": "eq", "left": { "absDifference": "$field" }, "right": { "value": 1 } },
+        { "op": "gt", "left": { "legacy": "payload.amountCents" }, "right": { "value": 10000000000000 } }
+      ]
+    }
+  },
+  {
+    "id": "L2",
+    "description": "Legacy INT columns clamp values above 2147483647 cents; the new service stores the exact BIGINT value.",
+    "scope": "field",
+    "affectedRules": ["R3", "R4/R5", "total"],
+    "explains": ["fineCents", "interestCents", "totalCents"],
+    "when": {
+      "all": [
+        { "op": "eq", "left": { "legacy": "$field" }, "right": { "value": 2147483647 } },
+        { "op": "gt", "left": { "shadow": "$field" }, "right": { "value": 2147483647 } }
+      ]
+    }
+  },
+  {
+    "id": "L3",
+    "description": "Legacy utf8_general_ci collation treats message ids that differ only by case, accents or trailing spaces as the same message; the new service keeps them as distinct messages.",
+    "scope": "shadow_only",
+    "affectedRules": [],
+    "when": { "op": "foldedMessageIdMatchesLegacyRow" }
+  },
+  {
+    "id": "C1",
+    "description": "The new service rejects amountCents above 1e12 with invalid_payload, so the message never reaches the shadow table; the legacy accepts it.",
+    "scope": "legacy_only",
+    "affectedRules": [],
+    "when": { "op": "gt", "left": { "legacy": "payload.amountCents" }, "right": { "value": 1000000000000 } }
+  }
+]

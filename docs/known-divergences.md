@@ -1,6 +1,6 @@
 # Known divergences between legacy and new
 
-The contract suite (`contract-tests/`) passes against both services. The cases below fall outside it: they were found by property-based probing and adversarial review, and each one is a deliberate decision rather than an accident. The comparator (Plan 5) will treat them as expected.
+The contract suite (`contract-tests/`) passes against both services. The cases below fall outside it: they were found by property-based probing and adversarial review, and each one is a deliberate decision rather than an accident. The comparator treats the ones it can observe as expected; see [ADR 0001](adr/0001-known-legacy-divergences.md) and `comparator/known-divergences.json`.
 
 ## Legacy bugs the new service does not reproduce
 

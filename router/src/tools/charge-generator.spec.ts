@@ -36,6 +36,13 @@ describe('generateCharges', () => {
     expect(has((c) => c.paid && c.referenceDate < c.dueDate)).toBe(true);
   });
 
+  it('includes amounts whose total overflows the legacy 32-bit INT columns', () => {
+    const amounts = generateCharges(fixedTemplates.length, 1, 'r').map(({ amountCents }) => amountCents);
+
+    expect(amounts).toContain(2_200_000_000);
+    expect(amounts).toContain(3_000_000_000);
+  });
+
   it('truncates the fixed cases when fewer messages are requested', () => {
     expect(generateCharges(3, 1, 'r')).toHaveLength(3);
   });

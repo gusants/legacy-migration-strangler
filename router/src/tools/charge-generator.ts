@@ -54,7 +54,16 @@ const boundaryCases: readonly ChargeTemplate[] = [
   template(2_525, '2026-10-02', { planType: 'yearly' }),
 ];
 
-export const fixedTemplates: readonly ChargeTemplate[] = [...documentExamples, ...boundaryCases];
+const legacyIntegerOverflowCases: readonly ChargeTemplate[] = [
+  template(2_200_000_000, '2026-10-11'),
+  template(3_000_000_000, '2026-10-11'),
+];
+
+export const fixedTemplates: readonly ChargeTemplate[] = [
+  ...documentExamples,
+  ...boundaryCases,
+  ...legacyIntegerOverflowCases,
+];
 
 const mulberry32 = (seed: number): (() => number) => {
   let state = seed >>> 0;
