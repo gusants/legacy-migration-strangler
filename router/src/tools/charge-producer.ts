@@ -46,9 +46,9 @@ export const produceCharges = async (
     options.ratePerSecond > 0 ? (SEND_BATCH_SIZE / options.ratePerSecond) * MILLISECONDS_PER_SECOND : 0;
 
   for (const batch of toBatches(interleave(valid, invalid))) {
-    const { failedIds } = await sender.sendBatch(queueUrl, batch);
-    if (failedIds.length > 0) {
-      throw new Error(`queue rejected ${failedIds.length} message(s)`);
+    const { failures } = await sender.sendBatch(queueUrl, batch);
+    if (failures.length > 0) {
+      throw new Error(`queue rejected ${failures.length} message(s)`);
     }
     if (pauseMs > 0) await sleep(pauseMs);
   }

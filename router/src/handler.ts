@@ -1,13 +1,12 @@
 import type { SQSBatchResponse, SQSEvent, SQSRecord } from 'aws-lambda';
 import type { Logger } from './logging/logger.js';
-import type { OutgoingMessage, QueueSender } from './queue/queue-sender.js';
+import type { OutgoingMessage, QueueSender, SendFailure } from './queue/queue-sender.js';
+import { outgoingMessageBytes, splitBatches } from './queue/split-batches.js';
 import type { QueueTarget, RouteTarget, RoutingDecision } from './routing/decide-route.js';
 import { parseRoutableMessage } from './routing/parse-routable-message.js';
 import type { RoutableMessage } from './routing/routable-message.js';
 import type { RoutePlanner } from './routing/route-planner.js';
 import type { RoutingConfig, RoutingConfigResolver } from './routing/routing-config.js';
-
-const SEND_BATCH_LIMIT = 10;
 
 export type HandlerDependencies = {
   configResolver: RoutingConfigResolver;
@@ -27,11 +26,6 @@ type Dispatch = {
 
 const errorText = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);
-
-const chunk = <T>(items: readonly T[], size: number): T[][] =>
-  Array.from({ length: Math.ceil(items.length / size) }, (_, index) =>
-    items.slice(index * size, (index + 1) * size),
-  );
 
 const toOutgoing = (
   index: number,
@@ -89,6 +83,15 @@ export const createHandler = ({ configResolver, planner, sender, queueUrls, logg
       role: target.role,
     });
 
+  const logRejection = ({ message, target }: Dispatch, failure: SendFailure): void =>
+    logger.error({
+      event: 'send_rejected',
+      messageId: message.messageId,
+      destination: target.queue,
+      code: failure.code,
+      senderFault: failure.senderFault,
+    });
+
   const logShadowFailure = ({ message, target }: Dispatch): void =>
     logger.error({ event: 'shadow_send_failed', ...message, destination: target.queue });
 
@@ -96,11 +99,17 @@ export const createHandler = ({ configResolver, planner, sender, queueUrls, logg
 
   const sendChunk = async (target: QueueTarget, dispatches: Dispatch[]): Promise<Dispatch[]> => {
     try {
-      const { failedIds } = await sender.sendBatch(
+      const { failures } = await sender.sendBatch(
         queueUrls[target],
         dispatches.map(({ outgoing }) => outgoing),
       );
-      const failed = dispatches.filter(({ outgoing }) => failedIds.includes(outgoing.id));
+      const failureById = new Map(failures.map((failure) => [failure.id, failure]));
+      const rejections = dispatches.flatMap((dispatch) => {
+        const failure = failureById.get(dispatch.outgoing.id);
+        return failure ? [{ dispatch, failure }] : [];
+      });
+      rejections.forEach(({ dispatch, failure }) => logRejection(dispatch, failure));
+      const failed = rejections.map(({ dispatch }) => dispatch);
       dispatches.filter((dispatch) => !failed.includes(dispatch)).forEach(logRouted);
       return failed;
     } catch (error) {
@@ -116,7 +125,9 @@ export const createHandler = ({ configResolver, planner, sender, queueUrls, logg
 
   const sendToTarget = async (target: QueueTarget, dispatches: Dispatch[]): Promise<Dispatch[]> => {
     const failedPerChunk = await Promise.all(
-      chunk(dispatches, SEND_BATCH_LIMIT).map((part) => sendChunk(target, part)),
+      splitBatches(dispatches, ({ outgoing }) => outgoingMessageBytes(outgoing)).map((part) =>
+        sendChunk(target, part),
+      ),
     );
     return failedPerChunk.flat();
   };

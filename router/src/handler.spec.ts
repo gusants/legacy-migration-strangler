@@ -23,6 +23,10 @@ const record = (n: number, recordBody = body(n)): SQSRecord => ({
   awsRegion: 'us-east-1',
 });
 
+const rejected = (...ids: string[]) => ({
+  failures: ids.map((id) => ({ id, code: 'InternalError', senderFault: false })),
+});
+
 const eventOf = (...records: SQSRecord[]): SQSEvent => ({ Records: records });
 
 type Sent = { queueUrl: string; messages: readonly OutgoingMessage[] };
@@ -49,7 +53,7 @@ const buildHandler = (options: {
       options.sendBatch ??
       (async (queueUrl, messages) => {
         sent.push({ queueUrl, messages });
-        return { failedIds: [] };
+        return { failures: [] };
       }),
   };
   const logger: Logger = {
@@ -98,6 +102,29 @@ describe('router handler', () => {
     expect(sent.map(({ messages }) => messages.length)).toEqual([10, 10, 3]);
   });
 
+  it('splits sends so no SendMessageBatch call exceeds 256 KB', async () => {
+    const { handler, sent } = buildHandler();
+    const bigBody = (n: number) => JSON.stringify({ messageId: `m${n}`, chargeId: `c${n}`, padding: 'x'.repeat(100_000) });
+
+    const response = await handler(eventOf(record(1, bigBody(1)), record(2, bigBody(2)), record(3, bigBody(3))));
+
+    expect(response.batchItemFailures).toEqual([]);
+    expect(sent.map(({ messages }) => messages.length).sort((a, b) => a - b)).toEqual([1, 2]);
+  });
+
+  it('logs why SendMessageBatch rejected an entry', async () => {
+    const { handler, logs } = buildHandler({
+      sendBatch: async () => ({ failures: [{ id: '1', code: 'RequestThrottled', senderFault: true }] }),
+    });
+
+    await handler(eventOf(record(1), record(2)));
+
+    expect(logs).toContainEqual({
+      level: 'error',
+      fields: { event: 'send_rejected', messageId: 'm2', destination: 'legacy', code: 'RequestThrottled', senderFault: true },
+    });
+  });
+
   it('does nothing for an empty event', async () => {
     const { handler, sent } = buildHandler();
 
@@ -121,7 +148,7 @@ describe('router handler', () => {
 
   it('reports only the entries SendMessageBatch rejected', async () => {
     const { handler, logs } = buildHandler({
-      sendBatch: async () => ({ failedIds: ['1'] }),
+      sendBatch: async () => rejected('1'),
     });
 
     const response = await handler(eventOf(record(1), record(2), record(3)));
@@ -227,7 +254,7 @@ describe('router handler', () => {
     it('does not fail the official message when only the shadow send is rejected', async () => {
       const { handler, logs } = buildHandler({
         planner: shadowPlanner,
-        sendBatch: async (queueUrl) => ({ failedIds: queueUrl === QUEUE_URLS.new ? ['0'] : [] }),
+        sendBatch: async (queueUrl) => (queueUrl === QUEUE_URLS.new ? rejected('0') : rejected()),
       });
 
       const response = await handler(eventOf(record(1)));
@@ -248,7 +275,7 @@ describe('router handler', () => {
         planner: shadowPlanner,
         sendBatch: async (queueUrl) => {
           if (queueUrl === QUEUE_URLS.new) throw new Error('new queue down');
-          return { failedIds: [] };
+          return { failures: [] };
         },
       });
 
@@ -258,7 +285,7 @@ describe('router handler', () => {
     it('fails the record when the primary send is rejected, even if the shadow copy went through', async () => {
       const { handler, logs } = buildHandler({
         planner: shadowPlanner,
-        sendBatch: async (queueUrl) => ({ failedIds: queueUrl === QUEUE_URLS.legacy ? ['0'] : [] }),
+        sendBatch: async (queueUrl) => (queueUrl === QUEUE_URLS.legacy ? rejected('0') : rejected()),
       });
 
       const response = await handler(eventOf(record(1)));

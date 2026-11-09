@@ -4,8 +4,14 @@ export type OutgoingMessage = {
   attributes: Record<string, string>;
 };
 
+export type SendFailure = {
+  id: string;
+  code: string;
+  senderFault: boolean;
+};
+
 export type SendBatchResult = {
-  failedIds: readonly string[];
+  failures: readonly SendFailure[];
 };
 
 export type QueueSender = {
