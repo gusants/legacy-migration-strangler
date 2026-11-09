@@ -8,7 +8,7 @@ const envSchema = z.object({
   INCOMING_QUEUE_URL: z.url().optional(),
   LEGACY_QUEUE_URL: z.url().optional(),
   NEW_QUEUE_URL: z.url().optional(),
-  ROUTING_CONFIG_PATH: z.string().min(1).default('routing.json'),
+  ROUTING_CONFIG_PATH: z.string().min(1).default('config/routing.json'),
 });
 
 export type RouterEnv = {

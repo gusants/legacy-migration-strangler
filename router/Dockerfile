@@ -28,6 +28,7 @@ WORKDIR /app/router
 COPY --from=prod-deps --chown=node:node /app/node_modules /app/node_modules
 COPY --from=prod-deps --chown=node:node /app/router/node_modules ./node_modules
 COPY --from=build --chown=node:node /app/router/dist ./dist
-COPY --chown=node:node router/package.json router/routing.json ./
+COPY --chown=node:node router/package.json ./
+COPY --chown=node:node router/config ./config
 USER node
 CMD ["node", "dist/local-runner.js"]
