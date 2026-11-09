@@ -8,7 +8,7 @@
   "scripts": {
     "infra:up": "docker compose up -d --wait",
     "infra:down": "docker compose down",
-    "test:contract:legacy": "TARGET_URL=http://localhost:8080 pnpm --filter contract-tests test",
+    "test:contract:legacy": "TARGET_URL=http://localhost:${LEGACY_PORT:-8080} pnpm --filter contract-tests test",
     "test:contract:new": "TARGET_URL=http://localhost:3000 pnpm --filter contract-tests test",
     "legacy:lint": "docker compose exec -T legacy sh -c \"find application -name '*.php' -print0 | xargs -0 -n1 php -l > /dev/null && echo php lint ok\"",
     "legacy:smoke": "TARGET_URL=http://localhost:${LEGACY_PORT:-8080} ./scripts/smoke-examples.sh"
