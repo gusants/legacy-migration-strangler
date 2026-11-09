@@ -138,6 +138,35 @@ jobs:
 
       - run: pnpm build
 
+  comparator-quality:
+    name: comparator quality
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: comparator
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm lint
+
+      - run: pnpm typecheck
+
+      - run: pnpm test:cov
+
+      - run: pnpm test:integration
+
+      - run: pnpm build
+
   routing-flow:
     name: routing flow (queue, router, legacy)
     runs-on: ubuntu-latest
@@ -177,6 +206,75 @@ jobs:
       - name: Service logs
         if: failure()
         run: docker compose logs --no-color
+
+      - name: Stop services
+        if: always()
+        run: docker compose down -v
+
+  shadow-run:
+    name: shadow run (legacy x new comparison)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Start queue, legacy, new service and router
+        run: |
+          cp .env.example .env
+          docker compose up -d --build --wait elasticmq legacy-db legacy legacy-worker new-db new router
+
+      - name: Wait for the queues to exist
+        run: |
+          for attempt in $(seq 1 30); do
+            if curl -fsS "http://localhost:9324/?Action=ListQueues" | grep -q "charges-new-dlq"; then
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "elasticmq did not expose the queues" >&2
+          exit 1
+
+      - name: Route every message to the legacy and a shadow copy to the new service
+        run: pnpm routing:set shadow
+
+      - name: Produce 500 messages and verify the legacy flow
+        run: pnpm verify:flow --count 500 | tee verify-flow.log
+
+      - name: Wait for the shadow queue to drain
+        run: ./scripts/wait-queue-drained.sh charges-new 180
+
+      - name: Compare legacy and shadow results
+        run: |
+          run_id="$(awk '/^run /{ print $2; exit }' verify-flow.log)"
+          test -n "${run_id}"
+          pnpm compare --run-id "${run_id}" --settle-seconds 0
+
+      - name: Comparison summary
+        if: always() && hashFiles('reports/shadow-*.md') != ''
+        run: cat reports/shadow-*.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Service logs
+        if: failure()
+        run: docker compose logs --no-color
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: shadow-report
+          path: reports/shadow-*
+          if-no-files-found: ignore
 
       - name: Stop services
         if: always()
