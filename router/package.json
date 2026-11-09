@@ -1,0 +1,32 @@
+{
+  "name": "router",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "lint": "oxlint --type-aware src/",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:cov": "vitest run --coverage",
+    "test:integration": "vitest run --config ./vitest.config.integration.ts",
+    "start": "node dist/local-runner.js",
+    "produce": "tsx src/tools/produce-charges.ts",
+    "verify:flow": "tsx src/tools/verify-flow.ts"
+  },
+  "dependencies": {
+    "@aws-sdk/client-sqs": "^3.1165.0",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/aws-lambda": "^8.10.164",
+    "@types/node": "^24.19.2",
+    "@vitest/coverage-v8": "^4.1.12",
+    "oxlint": "^1.91.0",
+    "oxlint-tsgolint": "^7.0.2005",
+    "testcontainers": "^12.2.1",
+    "tsx": "^4.23.15",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.12"
+  }
+}
