@@ -1,99 +1,84 @@
 import { setTimeout as sleep } from 'node:timers/promises';
-import { parseArgs } from 'node:util';
-import { createConnection, type Connection, type RowDataPacket } from 'mysql2/promise';
-import { newRunId, produceToLocalQueue } from './charge-producer.js';
+import type { SQSClient } from '@aws-sdk/client-sqs';
+import type { Connection } from 'mysql2/promise';
+import { createSqsClient } from '../config/create-sqs-client.js';
+import type { RunnerEnv } from '../config/env.js';
 import { generateCharges } from './charge-generator.js';
-import { isFlowIntact, judgeFlow, type FlowVerdict } from './flow-verdict.js';
+import { newRunId, produceToLocalQueue } from './charge-producer.js';
+import { describeVerdict, isFlowIntact, judgeFlow, type QueueSnapshot } from './flow-verdict.js';
+import { connectLegacyDatabase, storedMessageIds } from './legacy-results.js';
 import { loadLocalToolsEnv } from './local-environment.js';
+import { takeQueueSnapshot } from './queue-snapshot.js';
+import { parsePrimaryRoutedMessageIds, readRouterLogs } from './router-logs.js';
+import { parseVerifyOptions, type VerifyOptions } from './verify-options.js';
 
-const DEFAULT_COUNT = 200;
-const DEFAULT_SEED = 20_261_109;
-const DEFAULT_TIMEOUT_SECONDS = 180;
 const POLL_INTERVAL_MS = 1000;
 const SETTLE_MS = 5000;
 const MILLISECONDS_PER_SECOND = 1000;
-const REPORTED_IDS_LIMIT = 10;
+const LOG_CLOCK_MARGIN_MS = 60_000;
 
-const databaseDefaults: Record<string, string> = {
-  LEGACY_DB_HOST: '127.0.0.1',
-  LEGACY_DB_PORT: '3307',
-  LEGACY_DB_USER: 'legacy',
-  LEGACY_DB_PASSWORD: 'legacy',
-  LEGACY_DB_NAME: 'legacy',
+type Run = {
+  options: VerifyOptions;
+  runId: string;
+  env: RunnerEnv;
+  client: SQSClient;
+  connection: Connection;
+  before: QueueSnapshot;
 };
 
-const setting = (name: string): string => process.env[name] ?? databaseDefaults[name] ?? '';
-
-const databaseConnection = (): Promise<Connection> =>
-  createConnection({
-    host: setting('LEGACY_DB_HOST'),
-    port: Number(setting('LEGACY_DB_PORT')),
-    user: setting('LEGACY_DB_USER'),
-    password: setting('LEGACY_DB_PASSWORD'),
-    database: setting('LEGACY_DB_NAME'),
-  });
-
-const storedMessageIds = async (connection: Connection, runId: string): Promise<string[]> => {
-  const [rows] = await connection.query<RowDataPacket[]>(
-    'SELECT message_id FROM charge_results WHERE message_id LIKE ?',
-    [`${runId}\\_%`],
+const isComplete = async ({ options, runId, client, env, connection, before }: Run): Promise<boolean> => {
+  const stored = await storedMessageIds(connection, runId);
+  const now = await takeQueueSnapshot(client, env);
+  return (
+    stored.length >= options.count &&
+    now.incomingDlq - before.incomingDlq >= options.invalid &&
+    now.incomingPending === 0
   );
-  return rows.map((row) => String(row.message_id));
 };
 
-const waitForAll = async (
-  connection: Connection,
-  expectedIds: string[],
-  runId: string,
-  timeoutSeconds: number,
-): Promise<void> => {
-  const deadline = Date.now() + timeoutSeconds * MILLISECONDS_PER_SECOND;
-  while (Date.now() < deadline) {
-    const stored = await storedMessageIds(connection, runId);
-    if (stored.length >= expectedIds.length) return;
+const waitForCompletion = async (run: Run): Promise<void> => {
+  const deadline = Date.now() + run.options.timeoutSeconds * MILLISECONDS_PER_SECOND;
+  while (Date.now() < deadline && !(await isComplete(run))) {
     await sleep(POLL_INTERVAL_MS);
   }
 };
 
-const report = (verdict: FlowVerdict, runId: string): void => {
-  const sample = (ids: string[]): string => ids.slice(0, REPORTED_IDS_LIMIT).join(', ') || '-';
-  process.stdout.write(
-    [
-      `run ${runId}`,
-      `expected=${verdict.expected} stored_rows=${verdict.rows} distinct=${verdict.distinct}`,
-      `missing=${verdict.missing.length} (${sample(verdict.missing)})`,
-      `unexpected=${verdict.unexpected.length} (${sample(verdict.unexpected)})`,
-      isFlowIntact(verdict) ? 'RESULT: OK no loss, no duplicates' : 'RESULT: FAILED',
-      '',
-    ].join('\n'),
-  );
+const verify = async (options: VerifyOptions): Promise<boolean> => {
+  const env = loadLocalToolsEnv();
+  const client = createSqsClient(env);
+  const connection = await connectLegacyDatabase();
+  const runId = newRunId();
+  const startedAt = new Date();
+  const before = await takeQueueSnapshot(client, env);
+  const run: Run = { options, runId, env, client, connection, before };
+
+  try {
+    await produceToLocalQueue(env, { ...options, runId, ratePerSecond: 0 });
+    await waitForCompletion(run);
+    await sleep(SETTLE_MS);
+
+    const verdict = judgeFlow({
+      expectedIds: generateCharges(options.count, options.seed, runId).map(({ messageId }) => messageId),
+      storedIds: await storedMessageIds(connection, runId),
+      routedIds: parsePrimaryRoutedMessageIds(
+        await readRouterLogs(new Date(startedAt.getTime() - LOG_CLOCK_MARGIN_MS)),
+        `${runId}_`,
+      ),
+      invalidInjected: options.invalid,
+      before,
+      after: await takeQueueSnapshot(client, env),
+    });
+    process.stdout.write(describeVerdict(verdict, runId));
+    return isFlowIntact(verdict);
+  } finally {
+    await connection.end();
+    client.destroy();
+  }
 };
 
-const { values } = parseArgs({
-  options: {
-    count: { type: 'string', default: String(DEFAULT_COUNT) },
-    seed: { type: 'string', default: String(DEFAULT_SEED) },
-    invalid: { type: 'string', default: '0' },
-    timeout: { type: 'string', default: String(DEFAULT_TIMEOUT_SECONDS) },
-  },
-});
-const runId = newRunId();
-const count = Number(values.count);
-const expectedIds = generateCharges(count, Number(values.seed), runId).map(({ messageId }) => messageId);
-
-await produceToLocalQueue(loadLocalToolsEnv(), {
-  count,
-  invalid: Number(values.invalid),
-  seed: Number(values.seed),
-  runId,
-  ratePerSecond: 0,
-});
-
-const connection = await databaseConnection();
-await waitForAll(connection, expectedIds, runId, Number(values.timeout));
-await sleep(SETTLE_MS);
-const verdict = judgeFlow(expectedIds, await storedMessageIds(connection, runId));
-await connection.end();
-
-report(verdict, runId);
-process.exit(isFlowIntact(verdict) ? 0 : 1);
+try {
+  process.exit((await verify(parseVerifyOptions(process.argv.slice(2)))) ? 0 : 1);
+} catch (error) {
+  process.stderr.write(`verify-flow aborted: ${error instanceof Error ? error.message : String(error)}\n`);
+  process.exit(2);
+}
