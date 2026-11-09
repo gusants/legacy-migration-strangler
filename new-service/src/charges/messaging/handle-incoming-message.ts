@@ -3,12 +3,15 @@ import type { ChargeResult } from '../application/charge-result.js';
 import { chargeMessageSchema } from '../http/charge-message.schema.js';
 import type { Logger } from '../../logging/logger.js';
 import type { IncomingMessage } from './charge-queue.js';
+import { destinationOf, type ResultsDestination } from './results-destination.js';
 
 export type MessageOutcome = 'processed' | 'invalid' | 'failed';
 
 export type ChargeProcessor = {
   execute(message: ChargeMessage): Promise<ChargeResult>;
 };
+
+export type ChargeProcessors = Record<ResultsDestination, ChargeProcessor>;
 
 export type IncomingMessageHandler = (incoming: IncomingMessage) => Promise<MessageOutcome>;
 
@@ -24,16 +27,22 @@ const parseCharge = (body: string): ChargeMessage | undefined => {
 };
 
 export const createIncomingMessageHandler =
-  (processor: ChargeProcessor, logger: Logger): IncomingMessageHandler =>
+  (processors: ChargeProcessors, logger: Logger): IncomingMessageHandler =>
   async (incoming) => {
     const charge = parseCharge(incoming.body);
     if (!charge) {
       logger.error({ event: 'invalid_message', sqsMessageId: incoming.id });
       return 'invalid';
     }
-    const context = { sqsMessageId: incoming.id, messageId: charge.messageId, chargeId: charge.chargeId };
+    const destination = destinationOf(incoming.attributes);
+    const context = {
+      sqsMessageId: incoming.id,
+      messageId: charge.messageId,
+      chargeId: charge.chargeId,
+      shadow: destination === 'shadow',
+    };
     try {
-      const result = await processor.execute(charge);
+      const result = await processors[destination].execute(charge);
       logger.info({ event: 'message_processed', ...context, status: result.status });
       return 'processed';
     } catch (error) {

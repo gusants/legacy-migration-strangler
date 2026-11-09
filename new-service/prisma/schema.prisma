@@ -23,3 +23,19 @@ model ChargeResult {
 
   @@map("charge_results")
 }
+
+model ChargeResultShadow {
+  id            BigInt   @id @default(autoincrement())
+  messageId     String   @unique @map("message_id") @db.VarChar(128)
+  chargeId      String   @map("charge_id") @db.VarChar(128)
+  status        String   @db.VarChar(32)
+  daysLate      Int      @map("days_late")
+  fineCents     BigInt   @map("fine_cents")
+  interestCents BigInt   @map("interest_cents")
+  totalCents    BigInt   @map("total_cents")
+  payload       Json
+  receivedAt    DateTime @default(now()) @map("received_at") @db.Timestamptz(3)
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@map("charge_results_shadow")
+}

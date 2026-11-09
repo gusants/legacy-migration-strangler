@@ -17,7 +17,12 @@ const chargeBody = (overrides: Record<string, unknown> = {}): string =>
     ...overrides,
   });
 
-const incoming = (body: string): IncomingMessage => ({ id: 'sqs-1', receiptHandle: 'rh-1', body, attributes: {} });
+const incoming = (body: string, attributes: Record<string, string> = {}): IncomingMessage => ({
+  id: 'sqs-1',
+  receiptHandle: 'rh-1',
+  body,
+  attributes,
+});
 
 const paidLate: ChargeResult = {
   chargeId: 'ch-1',
@@ -30,21 +35,23 @@ const paidLate: ChargeResult = {
 
 const build = (execute: ChargeProcessor['execute'] = async () => paidLate) => {
   const executed: ChargeMessage[] = [];
+  const executedByShadow: ChargeMessage[] = [];
   const logs: { level: string; fields: LogFields }[] = [];
   const logger: Logger = {
     info: (fields) => logs.push({ level: 'info', fields }),
     error: (fields) => logs.push({ level: 'error', fields }),
   };
-  const handle = createIncomingMessageHandler(
-    {
-      execute: async (message) => {
-        executed.push(message);
-        return execute(message);
-      },
+  const processorRecording = (into: ChargeMessage[]): ChargeProcessor => ({
+    execute: async (message) => {
+      into.push(message);
+      return execute(message);
     },
+  });
+  const handle = createIncomingMessageHandler(
+    { official: processorRecording(executed), shadow: processorRecording(executedByShadow) },
     logger,
   );
-  return { handle, executed, logs };
+  return { handle, executed, executedByShadow, logs };
 };
 
 describe('incoming message handler', () => {
@@ -57,9 +64,36 @@ describe('incoming message handler', () => {
     expect(logs).toEqual([
       {
         level: 'info',
-        fields: { event: 'message_processed', sqsMessageId: 'sqs-1', messageId: 'msg-1', chargeId: 'ch-1', status: 'paid_late' },
+        fields: { event: 'message_processed', sqsMessageId: 'sqs-1', messageId: 'msg-1', chargeId: 'ch-1', shadow: false, status: 'paid_late' },
       },
     ]);
+  });
+
+  it('routes a shadow=true message to the shadow processor only', async () => {
+    const { handle, executed, executedByShadow, logs } = build();
+
+    await expect(handle(incoming(chargeBody(), { shadow: 'true' }))).resolves.toBe('processed');
+
+    expect(executed).toEqual([]);
+    expect(executedByShadow).toEqual([JSON.parse(chargeBody())]);
+    expect(logs[0]?.fields).toMatchObject({ event: 'message_processed', shadow: true });
+  });
+
+  it('routes a message without the shadow attribute to the official processor', async () => {
+    const { handle, executed, executedByShadow } = build();
+
+    await handle(incoming(chargeBody(), { routingMode: 'new' }));
+
+    expect(executed).toHaveLength(1);
+    expect(executedByShadow).toEqual([]);
+  });
+
+  it('keeps a shadow message that fails validation invalid as well', async () => {
+    const { handle, executedByShadow } = build();
+
+    await expect(handle(incoming('{broken', { shadow: 'true' }))).resolves.toBe('invalid');
+
+    expect(executedByShadow).toEqual([]);
   });
 
   it.each([
@@ -85,7 +119,7 @@ describe('incoming message handler', () => {
     expect(logs).toEqual([
       {
         level: 'error',
-        fields: { event: 'message_failed', sqsMessageId: 'sqs-1', messageId: 'msg-1', chargeId: 'ch-1', error: 'database is down' },
+        fields: { event: 'message_failed', sqsMessageId: 'sqs-1', messageId: 'msg-1', chargeId: 'ch-1', shadow: false, error: 'database is down' },
       },
     ]);
   });

@@ -7,7 +7,8 @@ import {
 import { sqsConsumerSettings, type Env } from '../../config/env.js';
 import { ENV } from '../../config/env.token.js';
 import { Logger } from '../../logging/logger.js';
-import { ProcessChargeUseCase } from '../application/process-charge.use-case.js';
+import type { ProcessChargeUseCase } from '../application/process-charge.use-case.js';
+import { OFFICIAL_PROCESS_CHARGE, SHADOW_PROCESS_CHARGE } from '../charges.tokens.js';
 import { ChargeConsumer } from './charge-consumer.js';
 import { createIncomingMessageHandler } from './handle-incoming-message.js';
 import { createSqsClient } from './create-sqs-client.js';
@@ -20,7 +21,8 @@ export class ChargeConsumerLifecycle implements OnApplicationBootstrap, BeforeAp
   constructor(
     @Inject(ENV) private readonly env: Env,
     private readonly logger: Logger,
-    private readonly processCharge: ProcessChargeUseCase,
+    @Inject(OFFICIAL_PROCESS_CHARGE) private readonly official: ProcessChargeUseCase,
+    @Inject(SHADOW_PROCESS_CHARGE) private readonly shadow: ProcessChargeUseCase,
   ) {}
 
   onApplicationBootstrap(): void {
@@ -28,7 +30,7 @@ export class ChargeConsumerLifecycle implements OnApplicationBootstrap, BeforeAp
     if (!settings) return;
     this.consumer = new ChargeConsumer(
       new SqsChargeQueue(createSqsClient(settings), settings.queueUrl),
-      createIncomingMessageHandler(this.processCharge, this.logger),
+      createIncomingMessageHandler({ official: this.official, shadow: this.shadow }, this.logger),
       this.logger,
     );
     this.consumer.start();
