@@ -8,6 +8,7 @@ export type FlowEvidence = {
   expectedIds: readonly string[];
   storedIds: readonly string[];
   routedIds: readonly string[];
+  shadowRoutedIds: readonly string[];
   invalidInjected: number;
   before: QueueSnapshot;
   after: QueueSnapshot;
@@ -22,6 +23,7 @@ export type FlowVerdict = {
   notRouted: string[];
   routedMoreThanOnce: string[];
   routedUnexpected: string[];
+  shadowCopiesSent: number;
   invalidInjected: number;
   incomingDlqGrowth: number;
   legacyDlqGrowth: number;
@@ -44,6 +46,7 @@ export const judgeFlow = (evidence: FlowEvidence): FlowVerdict => {
     notRouted: evidence.expectedIds.filter((id) => !routedCounts.has(id)),
     routedMoreThanOnce: [...routedCounts].filter(([, times]) => times > 1).map(([id]) => id),
     routedUnexpected: [...routedCounts.keys()].filter((id) => !expected.has(id)),
+    shadowCopiesSent: evidence.shadowRoutedIds.length,
     invalidInjected: evidence.invalidInjected,
     incomingDlqGrowth: evidence.after.incomingDlq - evidence.before.incomingDlq,
     legacyDlqGrowth: evidence.after.legacyDlq - evidence.before.legacyDlq,
@@ -92,6 +95,7 @@ export const describeVerdict = (verdict: FlowVerdict, runId: string): string => 
     `router log: not_routed=${verdict.notRouted.length} (${sample(verdict.notRouted)}) ` +
       `routed_more_than_once=${verdict.routedMoreThanOnce.length} (${sample(verdict.routedMoreThanOnce)}) ` +
       `routed_unexpected=${verdict.routedUnexpected.length} (${sample(verdict.routedUnexpected)})`,
+    `shadow copies sent to charges-new: ${verdict.shadowCopiesSent}`,
     `dead letters: charges-incoming-dlq +${verdict.incomingDlqGrowth} (expected +${verdict.invalidInjected}) ` +
       `charges-legacy-dlq +${verdict.legacyDlqGrowth} (expected +0) ` +
       `charges-incoming pending=${verdict.incomingPendingAfter}`,

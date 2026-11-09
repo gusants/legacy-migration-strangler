@@ -47,10 +47,10 @@ describe('FileRoutingConfigProvider', () => {
   it.each([
     ['unknown mode', '{"mode":"canary"}'],
     ['missing mode', '{}'],
-    ['a mode that is declared but not implemented (shadow)', '{"mode":"shadow"}'],
     ['a mode that is declared but not implemented (percentage)', '{"mode":"percentage","newTrafficPercent":10}'],
     ['a mode that is declared but not implemented (new)', '{"mode":"new"}'],
     ['unexpected key', '{"mode":"legacy","newTrafficPercent":10}'],
+    ['unexpected key in shadow mode', '{"mode":"shadow","newTrafficPercent":10}'],
   ])('fails on %s', async (_name, content) => {
     await writeFile(path, content);
 

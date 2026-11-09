@@ -12,8 +12,17 @@ describe('decideRoute', () => {
     });
   });
 
+  it('keeps legacy as the primary and sends a shadow copy to the new queue in shadow mode', () => {
+    expect(decideRoute(message, { mode: 'shadow' })).toEqual({
+      mode: 'shadow',
+      targets: [
+        { queue: 'legacy', role: 'primary' },
+        { queue: 'new', role: 'shadow' },
+      ],
+    });
+  });
+
   it.each<RoutingConfig>([
-    { mode: 'shadow' },
     { mode: 'percentage', newTrafficPercent: 10 },
     { mode: 'new' },
   ])('fails explicitly in $mode mode instead of falling back to legacy', (config) => {

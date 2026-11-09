@@ -8,9 +8,10 @@ export type RoutingConfig =
 
 export type RoutingMode = RoutingConfig['mode'];
 
-export const routingConfigSchema: z.ZodType<RoutingConfig> = z.strictObject({
-  mode: z.literal('legacy'),
-});
+export const routingConfigSchema: z.ZodType<RoutingConfig> = z.discriminatedUnion('mode', [
+  z.strictObject({ mode: z.literal('legacy') }),
+  z.strictObject({ mode: z.literal('shadow') }),
+]);
 
 export type RoutingConfigProvider = {
   load(): Promise<RoutingConfig>;

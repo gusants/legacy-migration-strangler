@@ -9,7 +9,7 @@ import { describeVerdict, isFlowIntact, judgeFlow, type QueueSnapshot } from './
 import { connectLegacyDatabase, storedMessageIds } from './legacy-results.js';
 import { loadLocalToolsEnv } from './local-environment.js';
 import { takeQueueSnapshot } from './queue-snapshot.js';
-import { parsePrimaryRoutedMessageIds, readRouterLogs } from './router-logs.js';
+import { parsePrimaryRoutedMessageIds, parseShadowRoutedMessageIds, readRouterLogs } from './router-logs.js';
 import { parseVerifyOptions, type VerifyOptions } from './verify-options.js';
 
 const POLL_INTERVAL_MS = 1000;
@@ -57,13 +57,12 @@ const verify = async (options: VerifyOptions): Promise<boolean> => {
     await waitForCompletion(run);
     await sleep(SETTLE_MS);
 
+    const routerLogs = await readRouterLogs(new Date(startedAt.getTime() - LOG_CLOCK_MARGIN_MS));
     const verdict = judgeFlow({
       expectedIds: generateCharges(options.count, options.seed, runId).map(({ messageId }) => messageId),
       storedIds: await storedMessageIds(connection, runId),
-      routedIds: parsePrimaryRoutedMessageIds(
-        await readRouterLogs(new Date(startedAt.getTime() - LOG_CLOCK_MARGIN_MS)),
-        `${runId}_`,
-      ),
+      routedIds: parsePrimaryRoutedMessageIds(routerLogs, `${runId}_`),
+      shadowRoutedIds: parseShadowRoutedMessageIds(routerLogs, `${runId}_`),
       invalidInjected: options.invalid,
       before,
       after: await takeQueueSnapshot(client, env),

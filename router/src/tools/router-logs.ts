@@ -19,19 +19,25 @@ const parseJsonLine = (line: string): RoutedEvent | undefined => {
   }
 };
 
-const isPrimaryRouted = (entry: RoutedEvent | undefined): entry is RoutedEvent =>
-  entry?.event === 'routed' && entry.role === 'primary';
+const isRoutedAs = (entry: RoutedEvent | undefined, role: string): entry is RoutedEvent =>
+  entry?.event === 'routed' && entry.role === role;
 
-const primaryRoutedMessageId = (entry: RoutedEvent | undefined, prefix: string): string[] => {
-  const messageId = isPrimaryRouted(entry) ? entry.messageId : undefined;
+const routedMessageId = (entry: RoutedEvent | undefined, role: string, prefix: string): string[] => {
+  const messageId = isRoutedAs(entry, role) ? entry.messageId : undefined;
   return typeof messageId === 'string' && messageId.startsWith(prefix) ? [messageId] : [];
 };
 
-export const parsePrimaryRoutedMessageIds = (logText: string, messageIdPrefix: string): string[] =>
+const parseRoutedMessageIds = (logText: string, role: string, messageIdPrefix: string): string[] =>
   logText
     .split('\n')
     .map(parseJsonLine)
-    .flatMap((entry) => primaryRoutedMessageId(entry, messageIdPrefix));
+    .flatMap((entry) => routedMessageId(entry, role, messageIdPrefix));
+
+export const parsePrimaryRoutedMessageIds = (logText: string, messageIdPrefix: string): string[] =>
+  parseRoutedMessageIds(logText, 'primary', messageIdPrefix);
+
+export const parseShadowRoutedMessageIds = (logText: string, messageIdPrefix: string): string[] =>
+  parseRoutedMessageIds(logText, 'shadow', messageIdPrefix);
 
 export const readRouterLogs = async (since: Date): Promise<string> => {
   try {

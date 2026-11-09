@@ -26,9 +26,15 @@ describe('writeRoutingConfigAtomically', () => {
     expect(await readdir(directory)).toEqual(['routing.json']);
   });
 
+  it('accepts the shadow mode', async () => {
+    await expect(writeRoutingConfigAtomically(path, { mode: 'shadow' })).resolves.toEqual({ mode: 'shadow' });
+
+    expect(JSON.parse(await readFile(path, 'utf8'))).toEqual({ mode: 'shadow' });
+  });
+
   it.each([
     ['an unknown mode', { mode: 'canary' }],
-    ['a declared but unimplemented mode', { mode: 'shadow' }],
+    ['a declared but unimplemented mode', { mode: 'new' }],
     ['a missing mode', {}],
   ])('refuses %s and keeps the current file untouched', async (_name, candidate) => {
     await expect(writeRoutingConfigAtomically(path, candidate)).rejects.toThrow();

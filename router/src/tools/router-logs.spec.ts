@@ -1,4 +1,4 @@
-import { parsePrimaryRoutedMessageIds } from './router-logs.js';
+import { parsePrimaryRoutedMessageIds, parseShadowRoutedMessageIds } from './router-logs.js';
 
 const routed = (messageId: string, role = 'primary') =>
   JSON.stringify({ level: 'info', event: 'routed', messageId, chargeId: 'c', mode: 'legacy', destination: 'legacy', role });
@@ -26,5 +26,13 @@ describe('parsePrimaryRoutedMessageIds', () => {
 
   it('tolerates a compose log prefix before the JSON', () => {
     expect(parsePrimaryRoutedMessageIds(`router-1  | ${routed('run1_0')}`, 'run1_')).toEqual(['run1_0']);
+  });
+});
+
+describe('parseShadowRoutedMessageIds', () => {
+  it('collects only the shadow routed events of the run', () => {
+    const logs = [routed('run1_0', 'shadow'), routed('run1_0'), routed('other_1', 'shadow'), routed('run1_2', 'shadow')].join('\n');
+
+    expect(parseShadowRoutedMessageIds(logs, 'run1_')).toEqual(['run1_0', 'run1_2']);
   });
 });

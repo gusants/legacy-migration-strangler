@@ -24,6 +24,13 @@ export const decideRoute = (
     case 'legacy':
       return { mode: 'legacy', targets: [{ queue: 'legacy', role: 'primary' }] };
     case 'shadow':
+      return {
+        mode: 'shadow',
+        targets: [
+          { queue: 'legacy', role: 'primary' },
+          { queue: 'new', role: 'shadow' },
+        ],
+      };
     case 'percentage':
     case 'new':
       throw new UnsupportedRoutingModeError(config.mode);

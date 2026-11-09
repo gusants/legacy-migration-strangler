@@ -13,6 +13,7 @@ const intactEvidence = (overrides: Partial<FlowEvidence> = {}): FlowEvidence => 
   expectedIds: ['a', 'b'],
   storedIds: ['b', 'a'],
   routedIds: ['a', 'b'],
+  shadowRoutedIds: [],
   invalidInjected: 0,
   before: quietQueues,
   after: quietQueues,
@@ -20,6 +21,14 @@ const intactEvidence = (overrides: Partial<FlowEvidence> = {}): FlowEvidence => 
 });
 
 describe('flow verdict', () => {
+  it('reports how many shadow copies the router sent without judging them', () => {
+    const verdict = judgeFlow(intactEvidence({ shadowRoutedIds: ['a', 'b'] }));
+
+    expect(verdict.shadowCopiesSent).toBe(2);
+    expect(isFlowIntact(verdict)).toBe(true);
+    expect(describeVerdict(verdict, 'run1')).toContain('shadow copies sent to charges-new: 2');
+  });
+
   it('accepts exactly-once routing, storage and untouched dead letters', () => {
     expect(failedChecks(judgeFlow(intactEvidence()))).toEqual([]);
   });
