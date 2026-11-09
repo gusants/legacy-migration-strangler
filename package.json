@@ -14,6 +14,7 @@
     "legacy:smoke": "TARGET_URL=http://localhost:${LEGACY_PORT:-8080} ./scripts/smoke-examples.sh",
     "produce": "pnpm --filter router produce",
     "verify:flow": "pnpm --filter router verify:flow",
-    "routing:set": "pnpm --filter router routing:set"
+    "routing:set": "pnpm --filter router routing:set",
+    "compare": "pnpm --filter comparator compare"
   }
 }
