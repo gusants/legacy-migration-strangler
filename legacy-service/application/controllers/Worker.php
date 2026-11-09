@@ -29,6 +29,7 @@ class Worker extends CI_Controller {
 			curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query(array(
 				'Action' => 'ReceiveMessage',
 				'MaxNumberOfMessages' => 10,
+				'VisibilityTimeout' => 60,
 				'WaitTimeSeconds' => 20,
 				'Version' => '2012-11-05'
 			)));
@@ -58,7 +59,7 @@ class Worker extends CI_Controller {
 				curl_setopt($ch, CURLOPT_POSTFIELDS, $body);
 				curl_setopt($ch, CURLOPT_HTTPHEADER, array('Content-Type: application/json'));
 				curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-				curl_setopt($ch, CURLOPT_TIMEOUT, 10);
+				curl_setopt($ch, CURLOPT_TIMEOUT, 5);
 				$out = curl_exec($ch);
 				$status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
 				curl_close($ch);
@@ -72,10 +73,15 @@ class Worker extends CI_Controller {
 						'Version' => '2012-11-05'
 					)));
 					curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-					curl_setopt($ch, CURLOPT_TIMEOUT, 10);
-					curl_exec($ch);
+					curl_setopt($ch, CURLOPT_TIMEOUT, 5);
+					$del = curl_exec($ch);
+					$del_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
 					curl_close($ch);
-					echo date('c') . " processed sqsId=" . $msg->MessageId . " " . $out . "\n";
+					if ($del !== false && $del_code == 200 && strpos($del, '<Error>') === false) {
+						echo date('c') . " processed sqsId=" . $msg->MessageId . " " . $out . "\n";
+					} else {
+						echo date('c') . " delete_failed sqsId=" . $msg->MessageId . " http=" . $del_code . "\n";
+					}
 				} else {
 					echo date('c') . " failed sqsId=" . $msg->MessageId . " http=" . $status . " " . $out . "\n";
 				}
