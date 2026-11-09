@@ -15,3 +15,5 @@ _local
 
 .DS_Store
 *.log
+
+reports/contract-*.json

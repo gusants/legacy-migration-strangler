@@ -1,0 +1,78 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  contract:
+    name: contract (${{ matrix.target }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: legacy
+            url: http://localhost:8080
+            services: legacy-db legacy
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Start ${{ matrix.target }} service
+        run: |
+          cp .env.example .env
+          docker compose up -d --build --wait ${{ matrix.services }}
+
+      - name: Wait for /health
+        run: |
+          for attempt in $(seq 1 30); do
+            curl -fsS "${{ matrix.url }}/health" && exit 0
+            sleep 2
+          done
+          echo "${{ matrix.target }} did not become healthy" >&2
+          exit 1
+
+      - name: PHP lint
+        if: matrix.target == 'legacy'
+        run: pnpm legacy:lint
+
+      - name: Reference examples smoke test
+        run: ./scripts/smoke-examples.sh
+        env:
+          TARGET_URL: ${{ matrix.url }}
+
+      - name: Contract suite
+        working-directory: contract-tests
+        run: pnpm vitest run --reporter=default --reporter=json --outputFile.json=../reports/contract-${{ matrix.target }}.json
+        env:
+          TARGET_URL: ${{ matrix.url }}
+
+      - name: Results per rule
+        if: always() && hashFiles(format('reports/contract-{0}.json', matrix.target)) != ''
+        run: ./scripts/contract-summary.sh reports/contract-${{ matrix.target }}.json ${{ matrix.target }} >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Service logs
+        if: failure()
+        run: docker compose logs --no-color
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: contract-report-${{ matrix.target }}
+          path: reports/
+          if-no-files-found: ignore
