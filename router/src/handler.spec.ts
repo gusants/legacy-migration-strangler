@@ -1,0 +1,177 @@
+import type { SQSEvent, SQSRecord } from 'aws-lambda';
+import { createHandler } from './handler.js';
+import type { LogFields, Logger } from './logging/logger.js';
+import type { OutgoingMessage, QueueSender } from './queue/queue-sender.js';
+import type { RoutingConfig, RoutingConfigProvider } from './routing/routing-config.js';
+
+const QUEUE_URLS = { legacy: 'http://q/legacy', new: 'http://q/new' };
+
+const body = (n: number) => JSON.stringify({ messageId: `m${n}`, chargeId: `c${n}`, amountCents: n });
+
+const record = (n: number, recordBody = body(n)): SQSRecord => ({
+  messageId: `sqs-${n}`,
+  receiptHandle: `rh-${n}`,
+  body: recordBody,
+  attributes: {} as SQSRecord['attributes'],
+  messageAttributes: {},
+  md5OfBody: '',
+  eventSource: 'aws:sqs',
+  eventSourceARN: 'arn:aws:sqs:us-east-1:000000000000:charges-incoming',
+  awsRegion: 'us-east-1',
+});
+
+const eventOf = (...records: SQSRecord[]): SQSEvent => ({ Records: records });
+
+type Sent = { queueUrl: string; messages: readonly OutgoingMessage[] };
+
+const buildHandler = (options: {
+  config?: RoutingConfig | Error;
+  sendBatch?: QueueSender['sendBatch'];
+} = {}) => {
+  const sent: Sent[] = [];
+  const logs: { level: 'info' | 'error'; fields: LogFields }[] = [];
+  const config = options.config ?? { mode: 'legacy' };
+  const configProvider: RoutingConfigProvider = {
+    load: async () => {
+      if (config instanceof Error) throw config;
+      return config;
+    },
+  };
+  const sender: QueueSender = {
+    sendBatch:
+      options.sendBatch ??
+      (async (queueUrl, messages) => {
+        sent.push({ queueUrl, messages });
+        return { failedIds: [] };
+      }),
+  };
+  const logger: Logger = {
+    info: (fields) => logs.push({ level: 'info', fields }),
+    error: (fields) => logs.push({ level: 'error', fields }),
+  };
+  const handler = createHandler({ configProvider, sender, queueUrls: QUEUE_URLS, logger });
+  return { handler, sent, logs };
+};
+
+describe('router handler', () => {
+  it('forwards messages to the legacy queue with the body untouched and routing attributes', async () => {
+    const { handler, sent } = buildHandler();
+
+    const response = await handler(eventOf(record(1), record(2)));
+
+    expect(response).toEqual({ batchItemFailures: [] });
+    expect(sent).toHaveLength(1);
+    expect(sent[0]?.queueUrl).toBe(QUEUE_URLS.legacy);
+    expect(sent[0]?.messages).toEqual([
+      { id: '0', body: body(1), attributes: { messageId: 'm1', chargeId: 'c1', routingMode: 'legacy' } },
+      { id: '1', body: body(2), attributes: { messageId: 'm2', chargeId: 'c2', routingMode: 'legacy' } },
+    ]);
+  });
+
+  it('logs one structured decision per routed message', async () => {
+    const { handler, logs } = buildHandler();
+
+    await handler(eventOf(record(1)));
+
+    expect(logs).toEqual([
+      {
+        level: 'info',
+        fields: { event: 'routed', messageId: 'm1', chargeId: 'c1', mode: 'legacy', destination: 'legacy' },
+      },
+    ]);
+  });
+
+  it('splits sends into batches of at most 10 entries', async () => {
+    const { handler, sent } = buildHandler();
+    const records = Array.from({ length: 23 }, (_, index) => record(index));
+
+    const response = await handler(eventOf(...records));
+
+    expect(response.batchItemFailures).toEqual([]);
+    expect(sent.map(({ messages }) => messages.length)).toEqual([10, 10, 3]);
+  });
+
+  it('does nothing for an empty event', async () => {
+    const { handler, sent } = buildHandler();
+
+    await expect(handler(eventOf())).resolves.toEqual({ batchItemFailures: [] });
+    expect(sent).toEqual([]);
+  });
+
+  it.each([
+    ['invalid JSON', record(1, '{nope')],
+    ['a payload without messageId', record(1, '{"chargeId":"c1"}')],
+    ['a payload without chargeId', record(1, '{"messageId":"m1"}')],
+  ])('reports %s as a batch item failure and still routes the others', async (_name, bad) => {
+    const { handler, sent, logs } = buildHandler();
+
+    const response = await handler(eventOf(bad, record(2)));
+
+    expect(response.batchItemFailures).toEqual([{ itemIdentifier: 'sqs-1' }]);
+    expect(sent[0]?.messages.map(({ id }) => id)).toEqual(['1']);
+    expect(logs.some(({ level, fields }) => level === 'error' && fields.event === 'invalid_message')).toBe(true);
+  });
+
+  it('reports only the entries SendMessageBatch rejected', async () => {
+    const { handler, logs } = buildHandler({
+      sendBatch: async () => ({ failedIds: ['1'] }),
+    });
+
+    const response = await handler(eventOf(record(1), record(2), record(3)));
+
+    expect(response.batchItemFailures).toEqual([{ itemIdentifier: 'sqs-2' }]);
+    const routed = logs.filter(({ fields }) => fields.event === 'routed').map(({ fields }) => fields.messageId);
+    expect(routed).toEqual(['m1', 'm3']);
+  });
+
+  it('fails every record of a chunk when the send call itself throws', async () => {
+    const { handler, logs } = buildHandler({
+      sendBatch: async () => {
+        throw new Error('network down');
+      },
+    });
+
+    const response = await handler(eventOf(record(1), record(2)));
+
+    expect(response.batchItemFailures).toEqual([{ itemIdentifier: 'sqs-1' }, { itemIdentifier: 'sqs-2' }]);
+    expect(logs).toEqual([
+      { level: 'error', fields: { event: 'send_failed', destination: 'legacy', error: 'network down' } },
+    ]);
+  });
+
+  it('describes non-Error throwables in the log', async () => {
+    const { handler, logs } = buildHandler({
+      sendBatch: async () => {
+        throw 'boom';
+      },
+    });
+
+    await handler(eventOf(record(1)));
+
+    expect(logs[0]?.fields.error).toBe('boom');
+  });
+
+  it('fails the whole batch and logs when the routing config cannot be loaded', async () => {
+    const { handler, sent, logs } = buildHandler({ config: new Error('bad routing.json') });
+
+    const response = await handler(eventOf(record(1), record(2)));
+
+    expect(response.batchItemFailures).toEqual([{ itemIdentifier: 'sqs-1' }, { itemIdentifier: 'sqs-2' }]);
+    expect(sent).toEqual([]);
+    expect(logs).toEqual([{ level: 'error', fields: { event: 'config_failed', error: 'bad routing.json' } }]);
+  });
+
+  it('fails every record visibly, without sending, in a mode that is not implemented', async () => {
+    const { handler, sent, logs } = buildHandler({ config: { mode: 'new' } });
+
+    const response = await handler(eventOf(record(1), record(2)));
+
+    expect(response.batchItemFailures).toEqual([{ itemIdentifier: 'sqs-1' }, { itemIdentifier: 'sqs-2' }]);
+    expect(sent).toEqual([]);
+    expect(logs).toHaveLength(2);
+    expect(logs[0]).toEqual({
+      level: 'error',
+      fields: { event: 'routing_failed', messageId: 'm1', chargeId: 'c1', error: 'routing mode "new" is not implemented' },
+    });
+  });
+});
