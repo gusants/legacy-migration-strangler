@@ -47,6 +47,22 @@ services:
       elasticmq:
         condition: service_started
 
+  legacy-worker:
+    build: ./legacy-service
+    init: true
+    restart: unless-stopped
+    working_dir: /var/www/html
+    command: ["php", "index.php", "worker", "consume", "charges-legacy"]
+    environment:
+      CI_ENV: ${LEGACY_CI_ENV:-development}
+      LEGACY_URL: http://legacy
+      SQS_ENDPOINT: http://elasticmq:9324
+    depends_on:
+      legacy:
+        condition: service_started
+      elasticmq:
+        condition: service_started
+
   new-db:
     image: postgres:17-alpine
     restart: unless-stopped
