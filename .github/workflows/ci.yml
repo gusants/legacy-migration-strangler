@@ -21,6 +21,9 @@ jobs:
           - target: legacy
             url: http://localhost:8080
             services: legacy-db legacy
+          - target: new
+            url: http://localhost:3000
+            services: new-db new
     steps:
       - uses: actions/checkout@v5
 
@@ -76,3 +79,32 @@ jobs:
           name: contract-report-${{ matrix.target }}
           path: reports/
           if-no-files-found: ignore
+
+  new-service-quality:
+    name: new-service quality
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: new-service
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm lint
+
+      - run: pnpm typecheck
+
+      - run: pnpm test:cov
+
+      - run: pnpm test:integration
+
+      - run: pnpm build
