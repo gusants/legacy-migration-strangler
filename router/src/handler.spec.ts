@@ -74,8 +74,8 @@ describe('router handler', () => {
     expect(sent).toHaveLength(1);
     expect(sent[0]?.queueUrl).toBe(QUEUE_URLS.legacy);
     expect(sent[0]?.messages).toEqual([
-      { id: '0', body: body(1), attributes: { messageId: 'm1', chargeId: 'c1', routingMode: 'legacy' } },
-      { id: '1', body: body(2), attributes: { messageId: 'm2', chargeId: 'c2', routingMode: 'legacy' } },
+      { id: '0', body: body(1), attributes: { messageId: 'm1', chargeId: 'c1', routingMode: 'legacy', routingRole: 'primary' } },
+      { id: '1', body: body(2), attributes: { messageId: 'm2', chargeId: 'c2', routingMode: 'legacy', routingRole: 'primary' } },
     ]);
   });
 
@@ -236,7 +236,7 @@ describe('router handler', () => {
     };
     const shadowPlanner: RoutePlanner = { plan: async () => shadowDecision };
 
-    it('marks only the shadow copy with the shadow attribute', async () => {
+    it('marks every copy with its routing role', async () => {
       const { handler, sent } = buildHandler({ planner: shadowPlanner });
 
       const response = await handler(eventOf(record(1)));
@@ -246,8 +246,8 @@ describe('router handler', () => {
         sent.map(({ queueUrl, messages }) => [queueUrl, messages[0]?.attributes]),
       );
       expect(attributesByQueue).toEqual({
-        [QUEUE_URLS.legacy]: { messageId: 'm1', chargeId: 'c1', routingMode: 'shadow' },
-        [QUEUE_URLS.new]: { messageId: 'm1', chargeId: 'c1', routingMode: 'shadow', shadow: 'true' },
+        [QUEUE_URLS.legacy]: { messageId: 'm1', chargeId: 'c1', routingMode: 'shadow', routingRole: 'primary' },
+        [QUEUE_URLS.new]: { messageId: 'm1', chargeId: 'c1', routingMode: 'shadow', routingRole: 'shadow' },
       });
     });
 
@@ -292,6 +292,28 @@ describe('router handler', () => {
 
       expect(response.batchItemFailures).toEqual([{ itemIdentifier: 'sqs-1' }]);
       expect(logs.some(({ fields }) => fields.event === 'shadow_send_failed')).toBe(false);
+    });
+  });
+
+  it('fails the record and sends nothing when the plan repeats a queue', async () => {
+    const repeatedQueue: RoutePlanner = {
+      plan: async () => ({
+        mode: 'shadow',
+        targets: [
+          { queue: 'new', role: 'primary' },
+          { queue: 'new', role: 'shadow' },
+        ],
+      }),
+    };
+    const { handler, sent, logs } = buildHandler({ planner: repeatedQueue });
+
+    const response = await handler(eventOf(record(1)));
+
+    expect(response.batchItemFailures).toEqual([{ itemIdentifier: 'sqs-1' }]);
+    expect(sent).toEqual([]);
+    expect(logs).toContainEqual({
+      level: 'error',
+      fields: { event: 'routing_failed', messageId: 'm1', chargeId: 'c1', error: 'routing plan targets queue "new" more than once' },
     });
   });
 

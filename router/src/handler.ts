@@ -3,6 +3,7 @@ import type { Logger } from './logging/logger.js';
 import type { OutgoingMessage, QueueSender, SendFailure } from './queue/queue-sender.js';
 import { outgoingMessageBytes, splitBatches } from './queue/split-batches.js';
 import type { QueueTarget, RouteTarget, RoutingDecision } from './routing/decide-route.js';
+import { assertDistinctQueues } from './routing/assert-distinct-queues.js';
 import { parseRoutableMessage } from './routing/parse-routable-message.js';
 import type { RoutableMessage } from './routing/routable-message.js';
 import type { RoutePlanner } from './routing/route-planner.js';
@@ -40,7 +41,7 @@ const toOutgoing = (
     messageId: message.messageId,
     chargeId: message.chargeId,
     routingMode: decision.mode,
-    ...(target.role === 'shadow' && { shadow: 'true' }),
+    routingRole: target.role,
   },
 });
 
@@ -60,7 +61,7 @@ export const createHandler = ({ configResolver, planner, sender, queueUrls, logg
       return undefined;
     }
     try {
-      const decision = await planner.plan(message, config);
+      const decision = assertDistinctQueues(await planner.plan(message, config));
       return decision.targets.map((target) => ({
         record,
         message,

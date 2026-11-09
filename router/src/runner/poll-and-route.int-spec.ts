@@ -105,11 +105,12 @@ describe('router flow against ElasticMQ', () => {
       messageId: 'flow-1',
       chargeId: 'ch_flow-1',
       routingMode: 'legacy',
+      routingRole: 'primary',
     });
     await expect(queues.visibleCount('charges-incoming')).resolves.toBe(0);
   });
 
-  it('in shadow mode delivers the official copy to legacy and a marked shadow copy to new', async () => {
+  it('in shadow mode delivers the official copy to legacy and a shadow-role copy to new', async () => {
     await writeFile(routingPath, '{"mode":"shadow"}');
     const body = chargeBody('flow-shadow');
     await queues.send('charges-incoming', body);
@@ -120,13 +121,13 @@ describe('router flow against ElasticMQ', () => {
     const [shadow, ...restNew] = await queues.drain('charges-new');
     expect([restLegacy, restNew]).toEqual([[], []]);
     expect(official?.Body).toBe(body);
-    expect(stringAttributes(official)).toEqual({ messageId: 'flow-shadow', chargeId: 'ch_flow-shadow', routingMode: 'shadow' });
+    expect(stringAttributes(official)).toEqual({ messageId: 'flow-shadow', chargeId: 'ch_flow-shadow', routingMode: 'shadow', routingRole: 'primary' });
     expect(shadow?.Body).toBe(body);
     expect(stringAttributes(shadow)).toEqual({
       messageId: 'flow-shadow',
       chargeId: 'ch_flow-shadow',
       routingMode: 'shadow',
-      shadow: 'true',
+      routingRole: 'shadow',
     });
     await expect(queues.visibleCount('charges-incoming')).resolves.toBe(0);
   });

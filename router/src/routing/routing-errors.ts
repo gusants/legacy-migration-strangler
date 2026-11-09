@@ -13,3 +13,10 @@ export class UnsupportedRoutingModeError extends Error {
     this.name = 'UnsupportedRoutingModeError';
   }
 }
+
+export class DuplicateRouteQueueError extends Error {
+  constructor(readonly queue: string) {
+    super(`routing plan targets queue "${queue}" more than once`);
+    this.name = 'DuplicateRouteQueueError';
+  }
+}
