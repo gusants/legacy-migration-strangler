@@ -53,3 +53,4 @@ $route['default_controller'] = 'health';
 $route['404_override'] = '';
 $route['translate_uri_dashes'] = FALSE;
 $route['health']['get'] = 'health/index';
+$route['charges/process']['post'] = 'charges/process';
