@@ -3,7 +3,7 @@ import type { ChargeResult } from '../application/charge-result.js';
 import { chargeMessageSchema } from '../http/charge-message.schema.js';
 import type { Logger } from '../../logging/logger.js';
 import type { IncomingMessage } from './charge-queue.js';
-import { destinationOf, type ResultsDestination } from './results-destination.js';
+import { resolveDestination, type ResultsDestination } from './results-destination.js';
 
 export type MessageOutcome = 'processed' | 'invalid' | 'failed';
 
@@ -26,15 +26,18 @@ const parseCharge = (body: string): ChargeMessage | undefined => {
   }
 };
 
-export const createIncomingMessageHandler =
-  (processors: ChargeProcessors, logger: Logger): IncomingMessageHandler =>
-  async (incoming) => {
+export const createIncomingMessageHandler = (processors: ChargeProcessors, logger: Logger): IncomingMessageHandler => {
+  const reportInvalid = (incoming: IncomingMessage, reason: string): MessageOutcome => {
+    logger.error({ event: 'invalid_message', sqsMessageId: incoming.id, reason });
+    return 'invalid';
+  };
+
+  return async (incoming) => {
     const charge = parseCharge(incoming.body);
-    if (!charge) {
-      logger.error({ event: 'invalid_message', sqsMessageId: incoming.id });
-      return 'invalid';
-    }
-    const destination = destinationOf(incoming.attributes);
+    if (!charge) return reportInvalid(incoming, 'body is not a valid charge');
+    const resolution = resolveDestination(incoming.attributes);
+    if ('invalidReason' in resolution) return reportInvalid(incoming, resolution.invalidReason);
+    const { destination } = resolution;
     const context = {
       sqsMessageId: incoming.id,
       messageId: charge.messageId,
@@ -50,3 +53,4 @@ export const createIncomingMessageHandler =
       return 'failed';
     }
   };
+};

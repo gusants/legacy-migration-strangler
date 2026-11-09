@@ -17,7 +17,7 @@ const chargeBody = (overrides: Record<string, unknown> = {}): string =>
     ...overrides,
   });
 
-const incoming = (body: string, attributes: Record<string, string> = {}): IncomingMessage => ({
+const incoming = (body: string, attributes: Record<string, string> = { routingRole: 'primary' }): IncomingMessage => ({
   id: 'sqs-1',
   receiptHandle: 'rh-1',
   body,
@@ -69,29 +69,33 @@ describe('incoming message handler', () => {
     ]);
   });
 
-  it('routes a shadow=true message to the shadow processor only', async () => {
+  it('routes a shadow-role message to the shadow processor only', async () => {
     const { handle, executed, executedByShadow, logs } = build();
 
-    await expect(handle(incoming(chargeBody(), { shadow: 'true' }))).resolves.toBe('processed');
+    await expect(handle(incoming(chargeBody(), { routingRole: 'shadow' }))).resolves.toBe('processed');
 
     expect(executed).toEqual([]);
     expect(executedByShadow).toEqual([JSON.parse(chargeBody())]);
     expect(logs[0]?.fields).toMatchObject({ event: 'message_processed', shadow: true });
   });
 
-  it('routes a message without the shadow attribute to the official processor', async () => {
-    const { handle, executed, executedByShadow } = build();
+  it.each([
+    ['no attributes', {}, 'missing routingRole attribute'],
+    ['only the legacy shadow flag', { shadow: 'true' }, 'missing routingRole attribute'],
+    ['an unknown role', { routingRole: 'audit' }, 'unknown routingRole "audit"'],
+  ])('fails closed on a valid charge with %s: no processor runs and the reason is logged', async (_name, attributes, reason) => {
+    const { handle, executed, executedByShadow, logs } = build();
 
-    await handle(incoming(chargeBody(), { routingMode: 'new' }));
+    await expect(handle(incoming(chargeBody(), attributes))).resolves.toBe('invalid');
 
-    expect(executed).toHaveLength(1);
-    expect(executedByShadow).toEqual([]);
+    expect([executed, executedByShadow]).toEqual([[], []]);
+    expect(logs).toEqual([{ level: 'error', fields: { event: 'invalid_message', sqsMessageId: 'sqs-1', reason } }]);
   });
 
   it('keeps a shadow message that fails validation invalid as well', async () => {
     const { handle, executedByShadow } = build();
 
-    await expect(handle(incoming('{broken', { shadow: 'true' }))).resolves.toBe('invalid');
+    await expect(handle(incoming('{broken', { routingRole: 'shadow' }))).resolves.toBe('invalid');
 
     expect(executedByShadow).toEqual([]);
   });
@@ -106,7 +110,7 @@ describe('incoming message handler', () => {
     await expect(handle(incoming(body))).resolves.toBe('invalid');
 
     expect(executed).toEqual([]);
-    expect(logs).toEqual([{ level: 'error', fields: { event: 'invalid_message', sqsMessageId: 'sqs-1' } }]);
+    expect(logs).toEqual([{ level: 'error', fields: { event: 'invalid_message', sqsMessageId: 'sqs-1', reason: 'body is not a valid charge' } }]);
   });
 
   it('reports a failure instead of throwing when the use case fails', async () => {

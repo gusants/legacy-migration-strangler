@@ -1,7 +1,17 @@
 export type ResultsDestination = 'official' | 'shadow';
 
-const SHADOW_ATTRIBUTE = 'shadow';
-const SHADOW_VALUE = 'true';
+export type DestinationResolution = { destination: ResultsDestination } | { invalidReason: string };
 
-export const destinationOf = (attributes: Readonly<Record<string, string>>): ResultsDestination =>
-  attributes[SHADOW_ATTRIBUTE] === SHADOW_VALUE ? 'shadow' : 'official';
+const ROUTING_ROLE_ATTRIBUTE = 'routingRole';
+
+const DESTINATION_BY_ROLE = new Map<string, ResultsDestination>([
+  ['primary', 'official'],
+  ['shadow', 'shadow'],
+]);
+
+export const resolveDestination = (attributes: Readonly<Record<string, string>>): DestinationResolution => {
+  const role = attributes[ROUTING_ROLE_ATTRIBUTE];
+  if (role === undefined) return { invalidReason: `missing ${ROUTING_ROLE_ATTRIBUTE} attribute` };
+  const destination = DESTINATION_BY_ROLE.get(role);
+  return destination ? { destination } : { invalidReason: `unknown ${ROUTING_ROLE_ATTRIBUTE} "${role}"` };
+};
