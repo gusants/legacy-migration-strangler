@@ -18,7 +18,9 @@ WORKDIR /app/new-service
 RUN pnpm prisma generate && pnpm build
 
 FROM manifests AS prod-deps
-RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile --prod --filter new-service --ignore-scripts
+COPY new-service/prisma ./new-service/prisma
+COPY new-service/prisma.config.ts ./new-service/prisma.config.ts
+RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile --prod --filter new-service
 
 FROM node:24-alpine AS runtime
 ENV NODE_ENV=production

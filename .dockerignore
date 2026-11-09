@@ -3,3 +3,6 @@
 **/coverage
 .git
 _local
+**/.env
+**/.env.*
+!**/.env.example
