@@ -6,6 +6,6 @@ export type IncomingMessage = {
 };
 
 export type ChargeQueue = {
-  receive(signal: AbortSignal): Promise<IncomingMessage[]>;
+  receive(signal: AbortSignal, maxMessages: number): Promise<IncomingMessage[]>;
   deleteBatch(receiptHandles: readonly string[]): Promise<void>;
 };

@@ -13,7 +13,8 @@
     "start": "node dist/local-runner.js",
     "produce": "tsx src/tools/produce-charges.ts",
     "verify:flow": "tsx src/tools/verify-flow.ts",
-    "routing:set": "tsx src/tools/set-routing-mode.ts"
+    "routing:set": "tsx src/tools/set-routing-mode.ts",
+    "redrive": "tsx src/tools/redrive.ts"
   },
   "dependencies": {
     "@aws-sdk/client-sqs": "^3.1165.0",

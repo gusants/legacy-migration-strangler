@@ -24,6 +24,16 @@ pnpm compare --run-id <run id>        # exit 0 PASSED, 1 FAILED, 2 INCONCLUSIVE 
 pnpm routing:set legacy
 ```
 
+Every copy the router sends carries a `routingRole` message attribute (`primary` or `shadow`). The new service decides the destination table only by it (`primary` to `charge_results`, `shadow` to `charge_results_shadow`); a message with a missing or unknown role is treated as invalid, kept in the queue and moved to `charges-new-dlq` after 5 receives.
+
+When every message of a batch fails with a transient error (for example the database is down), the new service's consumer backs off from 1s doubling up to 30s and polls one message at a time until one succeeds, so an outage does not burn the receive count of the whole queue. After fixing the cause, move dead-lettered messages back with:
+
+```bash
+pnpm redrive charges-new-dlq charges-new
+```
+
+(`StartMessageMoveTask` is not usable on ElasticMQ, which does not implement `ListMessageMoveTasks`, so the command receives, re-sends and deletes.)
+
 The report is written to `reports/shadow-<run id>.md` and `.json`. Example of a passing run (the two expected divergences are totals above 2,147,483,647 cents, which the legacy `INT` columns clamp):
 
 ```

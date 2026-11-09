@@ -13,7 +13,7 @@ describe('SqsChargeQueue', () => {
     const { client, send } = clientAnswering({ Messages: [] });
     const signal = new AbortController().signal;
 
-    await new SqsChargeQueue(client, QUEUE_URL).receive(signal);
+    await new SqsChargeQueue(client, QUEUE_URL).receive(signal, 10);
 
     const [command, options] = send.mock.calls[0] as unknown as [ReceiveMessageCommand, { abortSignal: AbortSignal }];
     expect(command.input).toEqual({
@@ -41,7 +41,7 @@ describe('SqsChargeQueue', () => {
       ],
     });
 
-    const messages = await new SqsChargeQueue(client, QUEUE_URL).receive(new AbortController().signal);
+    const messages = await new SqsChargeQueue(client, QUEUE_URL).receive(new AbortController().signal, 10);
 
     expect(messages).toEqual([
       { id: 'sqs-1', receiptHandle: 'rh-1', body: '{"a":1}', attributes: { shadow: 'true' } },
@@ -52,7 +52,7 @@ describe('SqsChargeQueue', () => {
   it('treats a response without messages as an empty poll', async () => {
     const { client } = clientAnswering({});
 
-    await expect(new SqsChargeQueue(client, QUEUE_URL).receive(new AbortController().signal)).resolves.toEqual([]);
+    await expect(new SqsChargeQueue(client, QUEUE_URL).receive(new AbortController().signal, 10)).resolves.toEqual([]);
   });
 
   it('deletes the given receipt handles in one batch', async () => {

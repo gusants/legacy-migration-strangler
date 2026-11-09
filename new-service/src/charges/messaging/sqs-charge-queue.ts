@@ -7,7 +7,6 @@ import {
 } from '@aws-sdk/client-sqs';
 import type { ChargeQueue, IncomingMessage } from './charge-queue.js';
 
-const MAX_MESSAGES_PER_RECEIVE = 10;
 const LONG_POLL_SECONDS = 20;
 
 const toStringAttributes = (
@@ -32,11 +31,11 @@ export class SqsChargeQueue implements ChargeQueue {
     private readonly queueUrl: string,
   ) {}
 
-  async receive(signal: AbortSignal): Promise<IncomingMessage[]> {
+  async receive(signal: AbortSignal, maxMessages: number): Promise<IncomingMessage[]> {
     const output = await this.client.send(
       new ReceiveMessageCommand({
         QueueUrl: this.queueUrl,
-        MaxNumberOfMessages: MAX_MESSAGES_PER_RECEIVE,
+        MaxNumberOfMessages: maxMessages,
         WaitTimeSeconds: LONG_POLL_SECONDS,
         MessageAttributeNames: ['All'],
       }),
