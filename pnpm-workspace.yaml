@@ -3,3 +3,13 @@ packages:
   - contract-tests
   - router
   - comparator
+
+onlyBuiltDependencies:
+  - "@prisma/engines"
+  - prisma
+  - esbuild
+
+ignoredBuiltDependencies:
+  - cpu-features
+  - protobufjs
+  - ssh2

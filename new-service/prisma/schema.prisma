@@ -1,0 +1,25 @@
+generator client {
+  provider            = "prisma-client"
+  output              = "../src/generated/prisma"
+  moduleFormat        = "esm"
+  importFileExtension = "js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model ChargeResult {
+  id            BigInt   @id @default(autoincrement())
+  messageId     String   @unique @map("message_id") @db.VarChar(128)
+  chargeId      String   @map("charge_id") @db.VarChar(128)
+  status        String   @db.VarChar(32)
+  daysLate      Int      @map("days_late")
+  fineCents     BigInt   @map("fine_cents")
+  interestCents BigInt   @map("interest_cents")
+  totalCents    BigInt   @map("total_cents")
+  payload       Json
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@map("charge_results")
+}

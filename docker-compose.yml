@@ -64,6 +64,26 @@ services:
       timeout: 5s
       retries: 10
 
+  new:
+    build:
+      context: .
+      dockerfile: new-service/Dockerfile
+    restart: unless-stopped
+    environment:
+      PORT: 3000
+      DATABASE_URL: postgresql://${NEW_DB_USER}:${NEW_DB_PASSWORD}@new-db:5432/${NEW_DB_NAME}
+    ports:
+      - "${NEW_PORT:-3000}:3000"
+    depends_on:
+      new-db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+
 volumes:
   legacy-db-data:
   new-db-data:

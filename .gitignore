@@ -17,3 +17,5 @@ _local
 *.log
 
 reports/contract-*.json
+
+new-service/src/generated
