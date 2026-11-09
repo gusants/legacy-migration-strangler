@@ -249,6 +249,9 @@ jobs:
       - name: Route every message to the legacy and a shadow copy to the new service
         run: pnpm routing:set shadow
 
+      - name: Record the new service dead-letter depth
+        run: echo "NEW_DLQ_BEFORE=$(./scripts/queue-depth.sh charges-new-dlq)" >> "$GITHUB_ENV"
+
       - name: Produce 500 messages and verify the legacy flow
         run: pnpm verify:flow --count 500 | tee verify-flow.log
 
@@ -260,6 +263,11 @@ jobs:
           run_id="$(awk '/^run /{ print $2; exit }' verify-flow.log)"
           test -n "${run_id}"
           pnpm compare --run-id "${run_id}" --settle-seconds 0
+
+      - name: Shadow copies stayed out of the official table and the dead-letter queue
+        run: |
+          run_id="$(awk '/^run /{ print $2; exit }' verify-flow.log)"
+          ./scripts/assert-shadow-isolation.sh "${run_id}" "${NEW_DLQ_BEFORE}"
 
       - name: Comparison summary
         if: always() && hashFiles('reports/shadow-*.md') != ''
