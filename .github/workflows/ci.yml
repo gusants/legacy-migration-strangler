@@ -108,3 +108,64 @@ jobs:
       - run: pnpm test:integration
 
       - run: pnpm build
+
+  router-quality:
+    name: router quality
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: router
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm lint
+
+      - run: pnpm typecheck
+
+      - run: pnpm test:cov
+
+      - run: pnpm test:integration
+
+      - run: pnpm build
+
+  routing-flow:
+    name: routing flow (queue, router, legacy)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Start queue, legacy and router
+        run: |
+          cp .env.example .env
+          docker compose up -d --build --wait elasticmq legacy-db legacy legacy-worker router
+
+      - name: Produce messages and verify no loss or duplication
+        run: pnpm verify:flow --count 300 --timeout 120
+
+      - name: Service logs
+        if: failure()
+        run: docker compose logs --no-color
+
+      - name: Stop services
+        if: always()
+        run: docker compose down -v
