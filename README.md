@@ -20,7 +20,7 @@ In `shadow` mode the legacy stays the official answer while a copy of every mess
 ```bash
 pnpm routing:set shadow
 pnpm verify:flow --count 500          # prints the run id
-pnpm compare --run-id <run id>        # exit code != 0 on an unexpected divergence
+pnpm compare --run-id <run id>        # exit 0 PASSED, 1 FAILED, 2 INCONCLUSIVE (3 aborted)
 pnpm routing:set legacy
 ```
 
@@ -38,4 +38,14 @@ The report is written to `reports/shadow-<run id>.md` and `.json`. Example of a 
 | Pending | 0 |
 ```
 
-Use `--since <ISO date>` instead of `--run-id` to compare a time window, and `--settle-seconds <n>` (default 30) to control how long one-sided messages are kept as pending.
+The verdict is printed in the report and in the `RESULT:` line, and is the exit code of `pnpm compare`:
+
+| Verdict | Exit code | Meaning |
+| --- | --- | --- |
+| PASSED | 0 | Every message was compared and nothing unexpected diverged. |
+| FAILED | 1 | An unexpected divergence or one-sided message exists (even if other messages are pending), or the scope matched no message. |
+| INCONCLUSIVE | 2 | No unexpected divergence, but some messages are still pending: the other side has not caught up, so the result proves nothing yet. Wait for the shadow queue to drain and compare again. |
+
+An exit code of 3 means the comparator aborted (bad arguments, database unreachable).
+
+Use `--since <ISO date>` instead of `--run-id` to compare a time window, and `--settle-seconds <n>` (default 30) to control how long one-sided messages are kept as pending. The run id may contain only letters, digits, `_` and `-`.

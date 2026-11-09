@@ -23,7 +23,9 @@ The comparator reads the databases, not the HTTP responses, so some of these sur
 - The new service corrects the legacy bugs; the legacy is not changed. It is being retired, and altering it would invalidate the contract it is the reference for.
 - The comparator knows the list. `comparator/known-divergences.json` holds one declarative matcher per observable divergence: an id, a description, the affected rules and a condition evaluated over the compared pair or over the one-sided row.
 - A divergence matched by a known entry is reported as "expected (L2)" and does not fail the gate. A pair is expected only if every divergent field is explained by some entry; one unexplained field makes the whole pair unexpected.
-- Anything not in the list fails the comparator with a non-zero exit code. Adding an entry is a reviewed change that must update this record and `docs/known-divergences.md`.
+- Anything not in the list fails the comparator with exit code 1 (FAILED), even while other messages are pending.
+- A run with pending messages (one-sided rows younger than the settle window) and no unexpected divergence is INCONCLUSIVE, exit code 2, never PASSED: a stopped or lagging consumer must not look like a green gate. Exit code 3 means the comparator aborted.
+- Adding an entry is a reviewed change that must update this record and `docs/known-divergences.md`.
 - The load generator includes totals above 2147483647 cents so that every normal shadow run exercises L2 and the report shows it as expected, proving the matcher is live.
 
 ## Consequences

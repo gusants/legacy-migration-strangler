@@ -53,6 +53,12 @@ describe('renderMarkdown', () => {
     expect(markdown).toContain('| C1 | 1 |');
   });
 
+  it('renders an inconclusive verdict with its reason when only pending messages remain', () => {
+    const markdown = render([{ kind: 'pending', messageId: 'p', side: 'shadow', row: chargeResult() }]);
+
+    expect(markdown).toContain('**Verdict: INCONCLUSIVE**\n- 1 messages still pending');
+  });
+
   it('renders pending examples without labels', () => {
     const markdown = render([{ kind: 'pending', messageId: 'p', side: 'shadow', row: chargeResult() }]);
 

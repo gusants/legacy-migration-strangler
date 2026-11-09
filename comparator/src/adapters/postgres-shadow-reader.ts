@@ -4,9 +4,11 @@ import type { ChargeResult } from '../domain/charge-result.js';
 import type { DatabaseConnection } from '../cli/database-environment.js';
 import { escapeLikePattern, parsePayload } from './payload.js';
 
-const SELECT_RESULTS = `
+export type ResultsTable = 'charge_results_shadow' | 'charge_results';
+
+const selectResults = (table: ResultsTable): string => `
   SELECT message_id, charge_id, status, days_late, fine_cents, interest_cents, total_cents, payload, created_at
-  FROM charge_results_shadow`;
+  FROM ${table}`;
 
 type ShadowRow = {
   message_id: string;
@@ -38,14 +40,17 @@ const toChargeResult = (row: ShadowRow): ChargeResult => ({
 });
 
 export class PostgresShadowReader implements ResultsReader {
-  constructor(private readonly connection: DatabaseConnection) {}
+  constructor(
+    private readonly connection: DatabaseConnection,
+    private readonly table: ResultsTable,
+  ) {}
 
   async read(scope: Scope): Promise<ChargeResult[]> {
     const client = new pg.Client(this.connection);
     await client.connect();
     try {
       const { clause, parameter } = filterOf(scope);
-      const { rows } = await client.query<ShadowRow>(`${SELECT_RESULTS} ${clause}`, [parameter]);
+      const { rows } = await client.query<ShadowRow>(`${selectResults(this.table)} ${clause}`, [parameter]);
       return rows.map(toChargeResult);
     } finally {
       await client.end();

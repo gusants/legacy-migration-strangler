@@ -27,7 +27,7 @@ const compare = (scope: Scope, settleSeconds = SETTLE_SECONDS) =>
   runComparison(
     {
       legacyReader: new MariaDbLegacyReader(databases.legacy),
-      shadowReader: new PostgresShadowReader(databases.shadow),
+      shadowReader: new PostgresShadowReader(databases.shadow, 'charge_results_shadow'),
       knownDivergences: realKnownDivergences(),
       now: () => new Date(),
     },
@@ -43,6 +43,10 @@ beforeAll(async () => {
   databases = await startDatabases();
 });
 
+beforeEach(async () => {
+  await databases.reset();
+});
+
 afterAll(async () => {
   await databases.stop();
 });
@@ -53,7 +57,7 @@ describe('shadow comparison against real databases', () => {
 
     const { report, verdict } = await compare({ runId: 'equal' });
 
-    expect(verdict.passed).toBe(true);
+    expect(verdict.status).toBe('PASSED');
     expect(report.totals).toMatchObject({ compared: 1, equal: 1, divergentUnexpected: 0 });
   });
 
@@ -62,7 +66,7 @@ describe('shadow comparison against real databases', () => {
 
     const { report, verdict } = await compare({ runId: 'rule' });
 
-    expect(verdict.passed).toBe(false);
+    expect(verdict.status).toBe('FAILED');
     expect(report.byRule).toEqual([{ rule: 'R3', expected: 0, unexpected: 1 }]);
     expect(report.examples.divergentUnexpected[0]).toMatchObject({
       messageId: 'rule_1',
@@ -77,7 +81,7 @@ describe('shadow comparison against real databases', () => {
 
     const { report, verdict } = await compare({ runId: 'clamp' });
 
-    expect(verdict.passed).toBe(true);
+    expect(verdict.status).toBe('PASSED');
     expect(report.totals).toMatchObject({ divergentExpected: 1, divergentUnexpected: 0 });
     expect(report.byKnownDivergence).toEqual([{ id: 'L2', occurrences: 1 }]);
     expect(report.examples.divergentExpected[0]?.legacy?.totalCents).toBe(INT_MAX);
@@ -88,7 +92,7 @@ describe('shadow comparison against real databases', () => {
 
     const { report, verdict } = await compare({ runId: 'legacyonly' });
 
-    expect(verdict.passed).toBe(false);
+    expect(verdict.status).toBe('FAILED');
     expect(report.totals).toMatchObject({ legacyOnly: 1, legacyOnlyExpected: 0 });
   });
 
@@ -97,7 +101,7 @@ describe('shadow comparison against real databases', () => {
 
     const { report, verdict } = await compare({ runId: 'cap' });
 
-    expect(verdict.passed).toBe(true);
+    expect(verdict.status).toBe('PASSED');
     expect(report.totals).toMatchObject({ legacyOnly: 1, legacyOnlyExpected: 1 });
   });
 
@@ -106,7 +110,7 @@ describe('shadow comparison against real databases', () => {
 
     const { report, verdict } = await compare({ runId: 'shadowonly' });
 
-    expect(verdict.passed).toBe(false);
+    expect(verdict.status).toBe('FAILED');
     expect(report.totals).toMatchObject({ shadowOnly: 1, shadowOnlyExpected: 0 });
   });
 
@@ -116,23 +120,44 @@ describe('shadow comparison against real databases', () => {
 
     const { report, verdict } = await compare({ runId: 'fold' });
 
-    expect(verdict.passed).toBe(true);
+    expect(verdict.status).toBe('PASSED');
     expect(report.totals).toMatchObject({ equal: 1, shadowOnly: 1, shadowOnlyExpected: 1 });
   });
 
-  it('keeps a recently written one-sided message pending instead of failing', async () => {
+  it('keeps a recently written one-sided message pending and the verdict inconclusive', async () => {
     await databases.insertLegacy(result('pending', '1', { recordedAt: secondsAgo(2) }));
 
     const { report, verdict } = await compare({ runId: 'pending' });
 
-    expect(verdict.passed).toBe(true);
+    expect(verdict).toMatchObject({ status: 'INCONCLUSIVE' });
     expect(report.totals).toMatchObject({ pending: 1, legacyOnly: 0 });
   });
 
+  it('is inconclusive, not passed, when the shadow side has not received anything yet', async () => {
+    await databases.insertLegacy(result('behind', '1', { recordedAt: secondsAgo(2) }));
+    await databases.insertLegacy(result('behind', '2', { recordedAt: secondsAgo(2) }));
+
+    const { report, verdict } = await compare({ runId: 'behind' });
+
+    expect(report.totals).toMatchObject({ compared: 0, pending: 2 });
+    expect(verdict.status).toBe('INCONCLUSIVE');
+  });
+
+  it('keeps failing on an unexpected divergence while other messages are pending', async () => {
+    await seedBoth(result('mixed', '1'), { fineCents: 201, totalCents: 10_301 });
+    await databases.insertLegacy(result('mixed', '2', { recordedAt: secondsAgo(2) }));
+
+    const { verdict } = await compare({ runId: 'mixed' });
+
+    expect(verdict.status).toBe('FAILED');
+  });
+
   it('fails the same one-sided message once the settle window is zero', async () => {
+    await databases.insertLegacy(result('pending', '1', { recordedAt: secondsAgo(2) }));
+
     const { verdict } = await compare({ runId: 'pending' }, 0);
 
-    expect(verdict.passed).toBe(false);
+    expect(verdict.status).toBe('FAILED');
   });
 
   it('does not mix runs: the run id is a literal prefix', async () => {
@@ -144,14 +169,22 @@ describe('shadow comparison against real databases', () => {
     expect(report.totals.legacyOnly).toBe(1);
   });
 
+  it('matches the run id case-sensitively on the legacy side like on the shadow side', async () => {
+    await databases.insertLegacy(result('Case', '1'));
+    await databases.insertLegacy(result('case', '2'));
+
+    const { report } = await compare({ runId: 'case' }, 0);
+
+    expect(report.totals.legacyOnly).toBe(1);
+  });
+
   it('selects by time window on both databases', async () => {
     await seedBoth(result('window', '1', { recordedAt: secondsAgo(3_000) }));
     await seedBoth(result('window', '2', { recordedAt: secondsAgo(100) }));
 
     const { report } = await compare({ since: secondsAgo(300) });
 
-    expect(report.totals).toMatchObject({ compared: 1 });
-    expect(report.totals.legacyOnly + report.totals.shadowOnly).toBe(0);
+    expect(report.totals).toMatchObject({ compared: 1, pending: 0, legacyOnly: 0, shadowOnly: 0 });
   });
 
   it('keeps an unreadable legacy payload from breaking the comparison', async () => {

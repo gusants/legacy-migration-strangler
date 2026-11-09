@@ -13,7 +13,7 @@ const SELECT_RESULTS = `
 
 const filterOf = (scope: Scope): { clause: string; parameter: string | number } =>
   'runId' in scope
-    ? { clause: 'WHERE message_id LIKE ?', parameter: `${escapeLikePattern(scope.runId)}\\_%` }
+    ? { clause: 'WHERE message_id LIKE BINARY ?', parameter: `${escapeLikePattern(scope.runId)}\\_%` }
     : { clause: 'WHERE created_at >= FROM_UNIXTIME(?)', parameter: Math.floor(scope.since.getTime() / MILLISECONDS_PER_SECOND) };
 
 const toChargeResult = (row: RowDataPacket): ChargeResult => ({

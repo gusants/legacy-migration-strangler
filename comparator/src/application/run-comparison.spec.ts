@@ -27,7 +27,7 @@ describe('runComparison', () => {
       settleSeconds: 30,
     });
 
-    expect(verdict.passed).toBe(true);
+    expect(verdict.status).toBe('PASSED');
     expect(report).toMatchObject({ generatedAt: NOW.toISOString(), scope: { runId: 'run' }, totals: { equal: 1 } });
   });
 
@@ -37,7 +37,7 @@ describe('runComparison', () => {
       { scope: { runId: 'run' }, settleSeconds: 30 },
     );
 
-    expect(verdict.passed).toBe(false);
+    expect(verdict.status).toBe('FAILED');
   });
 
   it('hands the same scope to both readers and serialises a since window', async () => {

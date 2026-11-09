@@ -20,6 +20,10 @@ describe('parseCompareOptions', () => {
     expect(() => parseCompareOptions(argv)).toThrow('exactly one of --run-id or --since');
   });
 
+  it('rejects a run id that is unsafe for a file name before reading any database', () => {
+    expect(() => parseCompareOptions(['--run-id', '../x'])).toThrow('run id must contain only');
+  });
+
   it('rejects an invalid date', () => {
     expect(() => parseCompareOptions(['--since', 'yesterday'])).toThrow('ISO-8601');
   });
@@ -56,6 +60,12 @@ describe('reportBaseName', () => {
     const report = buildReport([], { generatedAt, scope: { runId: 'run42' }, settleSeconds: 30 });
 
     expect(reportBaseName(report)).toBe('shadow-run42');
+  });
+
+  it.each(['../evil', 'a/b', 'a b', '', 'run.1'])('rejects the unsafe run id %j', (runId) => {
+    const report = buildReport([], { generatedAt, scope: { runId }, settleSeconds: 30 });
+
+    expect(() => reportBaseName(report)).toThrow('run id must contain only');
   });
 
   it('uses a file-safe timestamp for a since window', () => {

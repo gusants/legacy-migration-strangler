@@ -18,6 +18,7 @@ export type TestDatabases = {
   shadow: DatabaseConnection;
   insertLegacy(result: ChargeResult, rawPayload?: string): Promise<void>;
   insertShadow(result: ChargeResult): Promise<void>;
+  reset(): Promise<void>;
   stop(): Promise<void>;
 };
 
@@ -99,6 +100,12 @@ export const startDatabases = async (): Promise<TestDatabases> => {
           ],
         );
       }),
+    reset: async () => {
+      const connection = await createConnection(legacy);
+      await connection.query('TRUNCATE TABLE charge_results');
+      await connection.end();
+      await withPostgres(shadow, (client) => client.query('TRUNCATE TABLE charge_results_shadow'));
+    },
     stop: async () => {
       await Promise.all([mariadb.stop(), postgres.stop()]);
     },

@@ -55,7 +55,7 @@ export const renderMarkdown = (report: Report, verdict: Verdict): string => {
     '',
     `Generated at ${report.generatedAt}; messages written in the last ${report.settleSeconds}s are pending.`,
     '',
-    `**Verdict: ${verdict.passed ? 'PASSED' : 'FAILED'}**${verdict.failures.map((failure) => `\n- ${failure}`).join('')}`,
+    `**Verdict: ${verdict.status}**${verdict.failures.map((failure) => `\n- ${failure}`).join('')}`,
     '',
     '## Totals',
     '',

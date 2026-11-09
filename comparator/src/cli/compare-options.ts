@@ -1,5 +1,6 @@
 import { parseArgs } from 'node:util';
 import type { Scope } from '../application/ports.js';
+import { fileSafeRunId } from './report-files.js';
 
 export type CompareOptions = { scope: Scope; settleSeconds: number };
 
@@ -17,7 +18,7 @@ const parseScope = (runId: string | undefined, since: string | undefined): Scope
   if ((runId === undefined) === (since === undefined)) {
     throw new Error('exactly one of --run-id or --since is required');
   }
-  if (runId !== undefined) return { runId };
+  if (runId !== undefined) return { runId: fileSafeRunId(runId) };
   const date = new Date(since as string);
   if (Number.isNaN(date.getTime())) throw new Error('--since must be an ISO-8601 date');
   return { since: date };
