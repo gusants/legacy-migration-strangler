@@ -1,5 +1,5 @@
 import { createSqsClient } from './config/create-sqs-client.js';
-import { loadRouterEnv } from './config/env.js';
+import { loadRunnerEnv } from './config/env.js';
 import { createHandler } from './handler.js';
 import { jsonLogger } from './logging/logger.js';
 import { SqsQueueConsumer } from './queue/sqs-queue-consumer.js';
@@ -10,7 +10,7 @@ import { pureRoutePlanner } from './routing/pure-route-planner.js';
 import { runUntilAborted } from './runner/poll-and-route.js';
 
 const main = async (): Promise<void> => {
-  const env = loadRouterEnv(process.env);
+  const env = loadRunnerEnv(process.env);
   const client = createSqsClient(env);
   const shutdown = new AbortController();
   for (const signal of ['SIGTERM', 'SIGINT'] as const) {

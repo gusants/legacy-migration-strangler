@@ -1,5 +1,5 @@
 import { createSqsClient } from './config/create-sqs-client.js';
-import { loadRouterEnv } from './config/env.js';
+import { loadHandlerEnv } from './config/env.js';
 import { createHandler } from './handler.js';
 import { jsonLogger } from './logging/logger.js';
 import { SqsQueueSender } from './queue/sqs-queue-sender.js';
@@ -7,7 +7,7 @@ import { FileRoutingConfigProvider } from './routing/file-routing-config-provide
 import { LastValidRoutingConfigResolver } from './routing/last-valid-routing-config-resolver.js';
 import { pureRoutePlanner } from './routing/pure-route-planner.js';
 
-const env = loadRouterEnv(process.env);
+const env = loadHandlerEnv(process.env);
 
 export const handler = createHandler({
   configResolver: new LastValidRoutingConfigResolver(new FileRoutingConfigProvider(env.routingConfigPath)),

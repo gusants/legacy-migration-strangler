@@ -132,8 +132,12 @@ export const createHandler = ({ configResolver, planner, sender, queueUrls, logg
     return failedPerChunk.flat();
   };
 
-  const groupByTarget = (dispatches: Dispatch[]): Map<QueueTarget, Dispatch[]> =>
-    Map.groupBy(dispatches, ({ target }) => target.queue);
+  const groupByQueue = (dispatches: Dispatch[]): Map<QueueTarget, Dispatch[]> =>
+    dispatches.reduce((groups, dispatch) => {
+      const { queue } = dispatch.target;
+      groups.set(queue, [...(groups.get(queue) ?? []), dispatch]);
+      return groups;
+    }, new Map<QueueTarget, Dispatch[]>());
 
   return async (event: SQSEvent): Promise<SQSBatchResponse> => {
     let config: RoutingConfig;
@@ -166,7 +170,7 @@ export const createHandler = ({ configResolver, planner, sender, queueUrls, logg
     const dispatches = plans.flatMap(({ dispatches }) => dispatches ?? []);
 
     const failedPerTarget = await Promise.all(
-      [...groupByTarget(dispatches)].map(([target, group]) => sendToTarget(target, group)),
+      [...groupByQueue(dispatches)].map(([target, group]) => sendToTarget(target, group)),
     );
     const failed = failedPerTarget.flat();
     failed.filter(isShadow).forEach(logShadowFailure);

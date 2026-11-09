@@ -2,21 +2,27 @@ import { z } from 'zod';
 
 const LOCAL_ACCOUNT_ID = '000000000000';
 
-const envSchema = z.object({
+const handlerEnvSchema = z.object({
   SQS_ENDPOINT: z.url().optional(),
   AWS_REGION: z.string().min(1).default('us-east-1'),
-  INCOMING_QUEUE_URL: z.url().optional(),
   LEGACY_QUEUE_URL: z.url().optional(),
   NEW_QUEUE_URL: z.url().optional(),
   ROUTING_CONFIG_PATH: z.string().min(1).default('config/routing.json'),
 });
 
-export type RouterEnv = {
+const runnerEnvSchema = handlerEnvSchema.extend({
+  INCOMING_QUEUE_URL: z.url().optional(),
+});
+
+export type HandlerEnv = {
   endpoint: string | undefined;
   region: string;
   routingConfigPath: string;
-  incomingQueueUrl: string;
   queueUrls: { legacy: string; new: string };
+};
+
+export type RunnerEnv = HandlerEnv & {
+  incomingQueueUrl: string;
 };
 
 const resolveQueueUrl = (
@@ -32,22 +38,31 @@ const resolveQueueUrl = (
   return url;
 };
 
-export const loadRouterEnv = (raw: NodeJS.ProcessEnv): RouterEnv => {
-  const env = envSchema.parse(raw);
+const toHandlerEnv = (env: z.infer<typeof handlerEnvSchema>): HandlerEnv => {
   const endpoint = env.SQS_ENDPOINT;
   return {
     endpoint,
     region: env.AWS_REGION,
     routingConfigPath: env.ROUTING_CONFIG_PATH,
-    incomingQueueUrl: resolveQueueUrl(
-      env.INCOMING_QUEUE_URL,
-      endpoint,
-      'charges-incoming',
-      'INCOMING_QUEUE_URL',
-    ),
     queueUrls: {
       legacy: resolveQueueUrl(env.LEGACY_QUEUE_URL, endpoint, 'charges-legacy', 'LEGACY_QUEUE_URL'),
       new: resolveQueueUrl(env.NEW_QUEUE_URL, endpoint, 'charges-new', 'NEW_QUEUE_URL'),
     },
+  };
+};
+
+export const loadHandlerEnv = (raw: NodeJS.ProcessEnv): HandlerEnv =>
+  toHandlerEnv(handlerEnvSchema.parse(raw));
+
+export const loadRunnerEnv = (raw: NodeJS.ProcessEnv): RunnerEnv => {
+  const env = runnerEnvSchema.parse(raw);
+  return {
+    ...toHandlerEnv(env),
+    incomingQueueUrl: resolveQueueUrl(
+      env.INCOMING_QUEUE_URL,
+      env.SQS_ENDPOINT,
+      'charges-incoming',
+      'INCOMING_QUEUE_URL',
+    ),
   };
 };

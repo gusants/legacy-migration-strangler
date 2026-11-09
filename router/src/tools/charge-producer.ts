@@ -1,7 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { createSqsClient } from '../config/create-sqs-client.js';
-import type { RouterEnv } from '../config/env.js';
+import type { RunnerEnv } from '../config/env.js';
 import type { OutgoingMessage, QueueSender } from '../queue/queue-sender.js';
 import { SqsQueueSender } from '../queue/sqs-queue-sender.js';
 import { generateCharges, generateInvalidBodies } from './charge-generator.js';
@@ -55,7 +55,7 @@ export const produceCharges = async (
   return { runId: options.runId, valid: valid.length, invalid: invalid.length };
 };
 
-export const produceToLocalQueue = (env: RouterEnv, options: ProduceOptions): Promise<ProduceSummary> =>
+export const produceToLocalQueue = (env: RunnerEnv, options: ProduceOptions): Promise<ProduceSummary> =>
   produceCharges(new SqsQueueSender(createSqsClient(env)), env.incomingQueueUrl, options);
 
 export const newRunId = (): string => `run${Date.now().toString(36)}${randomBytes(2).toString('hex')}`;
