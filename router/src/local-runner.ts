@@ -5,6 +5,7 @@ import { jsonLogger } from './logging/logger.js';
 import { SqsQueueConsumer } from './queue/sqs-queue-consumer.js';
 import { SqsQueueSender } from './queue/sqs-queue-sender.js';
 import { FileRoutingConfigProvider } from './routing/file-routing-config-provider.js';
+import { LastValidRoutingConfigResolver } from './routing/last-valid-routing-config-resolver.js';
 import { pureRoutePlanner } from './routing/pure-route-planner.js';
 import { runUntilAborted } from './runner/poll-and-route.js';
 
@@ -24,7 +25,7 @@ const main = async (): Promise<void> => {
     {
       consumer: new SqsQueueConsumer(client),
       handler: createHandler({
-        configProvider: new FileRoutingConfigProvider(env.routingConfigPath),
+        configResolver: new LastValidRoutingConfigResolver(new FileRoutingConfigProvider(env.routingConfigPath)),
         planner: pureRoutePlanner,
         sender: new SqsQueueSender(client),
         queueUrls: env.queueUrls,

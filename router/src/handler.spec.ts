@@ -5,7 +5,7 @@ import type { OutgoingMessage, QueueSender } from './queue/queue-sender.js';
 import type { RoutingDecision } from './routing/decide-route.js';
 import { pureRoutePlanner } from './routing/pure-route-planner.js';
 import type { RoutePlanner } from './routing/route-planner.js';
-import type { RoutingConfig, RoutingConfigProvider } from './routing/routing-config.js';
+import type { RoutingConfig, RoutingConfigResolution, RoutingConfigResolver } from './routing/routing-config.js';
 
 const QUEUE_URLS = { legacy: 'http://q/legacy', new: 'http://q/new' };
 
@@ -29,16 +29,19 @@ type Sent = { queueUrl: string; messages: readonly OutgoingMessage[] };
 
 const buildHandler = (options: {
   config?: RoutingConfig | Error;
+  fallbackReason?: string;
   sendBatch?: QueueSender['sendBatch'];
   planner?: RoutePlanner;
 } = {}) => {
   const sent: Sent[] = [];
   const logs: { level: 'info' | 'error'; fields: LogFields }[] = [];
   const config = options.config ?? { mode: 'legacy' };
-  const configProvider: RoutingConfigProvider = {
-    load: async () => {
+  const configResolver: RoutingConfigResolver = {
+    resolve: async (): Promise<RoutingConfigResolution> => {
       if (config instanceof Error) throw config;
-      return config;
+      return options.fallbackReason === undefined
+        ? { config }
+        : { config, fallbackReason: options.fallbackReason };
     },
   };
   const sender: QueueSender = {
@@ -53,7 +56,7 @@ const buildHandler = (options: {
     info: (fields) => logs.push({ level: 'info', fields }),
     error: (fields) => logs.push({ level: 'error', fields }),
   };
-  const handler = createHandler({ configProvider, planner: options.planner ?? pureRoutePlanner, sender, queueUrls: QUEUE_URLS, logger });
+  const handler = createHandler({ configResolver, planner: options.planner ?? pureRoutePlanner, sender, queueUrls: QUEUE_URLS, logger });
   return { handler, sent, logs };
 };
 
@@ -139,7 +142,7 @@ describe('router handler', () => {
 
     expect(response.batchItemFailures).toEqual([{ itemIdentifier: 'sqs-1' }, { itemIdentifier: 'sqs-2' }]);
     expect(logs).toEqual([
-      { level: 'error', fields: { event: 'send_failed', destination: 'legacy', error: 'network down' } },
+      { level: 'error', fields: { event: 'send_failed', destination: 'legacy', affectedRecords: 2, error: 'network down' } },
     ]);
   });
 
@@ -155,6 +158,23 @@ describe('router handler', () => {
     expect(logs[0]?.fields.error).toBe('boom');
   });
 
+  it('keeps routing with the last valid config and reports why the new one was ignored', async () => {
+    const { handler, sent, logs } = buildHandler({ fallbackReason: 'routing config is not valid JSON' });
+
+    const response = await handler(eventOf(record(1), record(2)));
+
+    expect(response.batchItemFailures).toEqual([]);
+    expect(sent[0]?.messages).toHaveLength(2);
+    expect(logs[0]).toEqual({
+      level: 'error',
+      fields: {
+        event: 'config_invalid_using_last_valid',
+        error: 'routing config is not valid JSON',
+        affectedRecords: 2,
+      },
+    });
+  });
+
   it('fails the whole batch and logs when the routing config cannot be loaded', async () => {
     const { handler, sent, logs } = buildHandler({ config: new Error('bad routing.json') });
 
@@ -162,7 +182,7 @@ describe('router handler', () => {
 
     expect(response.batchItemFailures).toEqual([{ itemIdentifier: 'sqs-1' }, { itemIdentifier: 'sqs-2' }]);
     expect(sent).toEqual([]);
-    expect(logs).toEqual([{ level: 'error', fields: { event: 'config_failed', error: 'bad routing.json' } }]);
+    expect(logs).toEqual([{ level: 'error', fields: { event: 'config_failed', error: 'bad routing.json', affectedRecords: 2 } }]);
   });
 
   it('fails every record visibly, without sending, in a mode that is not implemented', async () => {

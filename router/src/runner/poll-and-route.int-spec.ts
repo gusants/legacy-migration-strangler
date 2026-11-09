@@ -7,6 +7,7 @@ import type { Logger } from '../logging/logger.js';
 import { SqsQueueConsumer } from '../queue/sqs-queue-consumer.js';
 import { SqsQueueSender } from '../queue/sqs-queue-sender.js';
 import { FileRoutingConfigProvider } from '../routing/file-routing-config-provider.js';
+import { LastValidRoutingConfigResolver } from '../routing/last-valid-routing-config-resolver.js';
 import { pureRoutePlanner } from '../routing/pure-route-planner.js';
 import {
   startElasticMq,
@@ -52,7 +53,7 @@ const buildDependencies = (
   return {
     consumer: new SqsQueueConsumer(queues.client),
     handler: createHandler({
-      configProvider: new FileRoutingConfigProvider(routingPath),
+      configResolver: new LastValidRoutingConfigResolver(new FileRoutingConfigProvider(routingPath)),
       planner: pureRoutePlanner,
       sender: new SqsQueueSender(queues.client),
       queueUrls: { legacy: queues.queueUrl('charges-legacy'), new: queues.queueUrl('charges-new') },
@@ -108,14 +109,14 @@ describe('router flow against ElasticMQ', () => {
     await expect(queues.visibleCount('charges-incoming')).resolves.toBe(0);
   });
 
-  it('keeps the message in incoming and logs the error when the mode is not implemented', async () => {
-    await writeFile(routingPath, '{"mode":"new"}');
+  it('keeps the message in incoming and fails the batch when no valid config was ever read', async () => {
+    await writeFile(routingPath, '{"mode":"shadow"}');
     await queues.send('charges-incoming', chargeBody('flow-unsupported'));
 
     await pollAndRouteOnce(deps, new AbortController().signal);
 
     expect(errors).toEqual([
-      expect.objectContaining({ event: 'routing_failed', messageId: 'flow-unsupported' }),
+      expect.objectContaining({ event: 'config_failed', affectedRecords: 1 }),
     ]);
     await waitUntil(async () => (await queues.visibleCount('charges-incoming')) === 1, 5000);
     await expect(queues.drain('charges-new')).resolves.toEqual([]);

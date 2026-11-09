@@ -5,12 +5,12 @@ import type { QueueTarget, RouteTarget, RoutingDecision } from './routing/decide
 import { parseRoutableMessage } from './routing/parse-routable-message.js';
 import type { RoutableMessage } from './routing/routable-message.js';
 import type { RoutePlanner } from './routing/route-planner.js';
-import type { RoutingConfig, RoutingConfigProvider } from './routing/routing-config.js';
+import type { RoutingConfig, RoutingConfigResolver } from './routing/routing-config.js';
 
 const SEND_BATCH_LIMIT = 10;
 
 export type HandlerDependencies = {
-  configProvider: RoutingConfigProvider;
+  configResolver: RoutingConfigResolver;
   planner: RoutePlanner;
   sender: QueueSender;
   queueUrls: Record<QueueTarget, string>;
@@ -54,7 +54,7 @@ const toBatchResponse = (records: readonly SQSRecord[]): SQSBatchResponse => ({
   batchItemFailures: records.map((record) => ({ itemIdentifier: record.messageId })),
 });
 
-export const createHandler = ({ configProvider, planner, sender, queueUrls, logger }: HandlerDependencies) => {
+export const createHandler = ({ configResolver, planner, sender, queueUrls, logger }: HandlerDependencies) => {
   const planRecord = async (
     record: SQSRecord,
     index: number,
@@ -104,7 +104,12 @@ export const createHandler = ({ configProvider, planner, sender, queueUrls, logg
       dispatches.filter((dispatch) => !failed.includes(dispatch)).forEach(logRouted);
       return failed;
     } catch (error) {
-      logger.error({ event: 'send_failed', destination: target, error: errorText(error) });
+      logger.error({
+        event: 'send_failed',
+        destination: target,
+        affectedRecords: dispatches.length,
+        error: errorText(error),
+      });
       return dispatches;
     }
   };
@@ -122,9 +127,21 @@ export const createHandler = ({ configProvider, planner, sender, queueUrls, logg
   return async (event: SQSEvent): Promise<SQSBatchResponse> => {
     let config: RoutingConfig;
     try {
-      config = await configProvider.load();
+      const resolution = await configResolver.resolve();
+      config = resolution.config;
+      if (resolution.fallbackReason !== undefined) {
+        logger.error({
+          event: 'config_invalid_using_last_valid',
+          error: resolution.fallbackReason,
+          affectedRecords: event.Records.length,
+        });
+      }
     } catch (error) {
-      logger.error({ event: 'config_failed', error: errorText(error) });
+      logger.error({
+        event: 'config_failed',
+        error: errorText(error),
+        affectedRecords: event.Records.length,
+      });
       return toBatchResponse(event.Records);
     }
 

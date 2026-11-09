@@ -25,18 +25,12 @@ describe('FileRoutingConfigProvider', () => {
     await expect(provider.load()).resolves.toEqual({ mode: 'legacy' });
   });
 
-  it('loads the percentage mode with its parameter', async () => {
-    await writeFile(path, '{"mode":"percentage","newTrafficPercent":25}');
-
-    await expect(provider.load()).resolves.toEqual({ mode: 'percentage', newTrafficPercent: 25 });
-  });
-
   it('rereads the file on every load', async () => {
     await writeFile(path, '{"mode":"legacy"}');
     await provider.load();
-    await writeFile(path, '{"mode":"new"}');
+    await writeFile(path, '{"mode":"canary"}');
 
-    await expect(provider.load()).resolves.toEqual({ mode: 'new' });
+    await expect(provider.load()).rejects.toThrow('invalid routing config');
   });
 
   it('fails when the file does not exist', async () => {
@@ -53,8 +47,9 @@ describe('FileRoutingConfigProvider', () => {
   it.each([
     ['unknown mode', '{"mode":"canary"}'],
     ['missing mode', '{}'],
-    ['percentage out of range', '{"mode":"percentage","newTrafficPercent":101}'],
-    ['percentage without parameter', '{"mode":"percentage"}'],
+    ['a mode that is declared but not implemented (shadow)', '{"mode":"shadow"}'],
+    ['a mode that is declared but not implemented (percentage)', '{"mode":"percentage","newTrafficPercent":10}'],
+    ['a mode that is declared but not implemented (new)', '{"mode":"new"}'],
     ['unexpected key', '{"mode":"legacy","newTrafficPercent":10}'],
   ])('fails on %s', async (_name, content) => {
     await writeFile(path, content);
