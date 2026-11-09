@@ -11,6 +11,7 @@ COPY pnpm-workspace.yaml pnpm-lock.yaml package.json ./
 COPY new-service/package.json ./new-service/package.json
 COPY contract-tests/package.json ./contract-tests/package.json
 COPY router/package.json ./router/package.json
+COPY comparator/package.json ./comparator/package.json
 
 FROM manifests AS build
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile --filter new-service --ignore-scripts

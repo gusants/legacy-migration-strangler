@@ -1,0 +1,18 @@
+{
+  "compilerOptions": {
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "esModuleInterop": true,
+    "isolatedModules": true,
+    "removeComments": true,
+    "target": "ES2024",
+    "sourceMap": true,
+    "outDir": "./dist",
+    "rootDir": ".",
+    "skipLibCheck": true,
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "types": ["vitest/globals", "node"]
+  },
+  "include": ["src"]
+}

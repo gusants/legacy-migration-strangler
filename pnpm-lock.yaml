@@ -8,6 +8,52 @@ importers:
 
   .: {}
 
+  comparator:
+    dependencies:
+      mysql2:
+        specifier: ^3.24.6
+        version: 3.24.6(@types/node@24.19.2)
+      pg:
+        specifier: ^8.23.1
+        version: 8.23.1
+      zod:
+        specifier: ^4.6.7
+        version: 4.6.7
+    devDependencies:
+      '@testcontainers/mariadb':
+        specifier: ^12.2.1
+        version: 12.2.1(bare-buffer@3.7.1)
+      '@testcontainers/postgresql':
+        specifier: ^12.2.1
+        version: 12.2.1(bare-buffer@3.7.1)
+      '@types/node':
+        specifier: ^24.19.2
+        version: 24.19.2
+      '@types/pg':
+        specifier: ^8.23.1
+        version: 8.23.1
+      '@vitest/coverage-v8':
+        specifier: ^4.1.12
+        version: 4.1.12(vitest@4.1.12)
+      oxlint:
+        specifier: ^1.91.0
+        version: 1.91.0(oxlint-tsgolint@7.0.2005)
+      oxlint-tsgolint:
+        specifier: ^7.0.2005
+        version: 7.0.2005
+      testcontainers:
+        specifier: ^12.2.1
+        version: 12.2.1(bare-buffer@3.7.1)
+      tsx:
+        specifier: ^4.23.15
+        version: 4.23.15
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
+      vitest:
+        specifier: ^4.1.12
+        version: 4.1.12(@types/node@24.19.2)(@vitest/coverage-v8@4.1.12)(vite@8.3.5(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))
+
   contract-tests:
     devDependencies:
       '@types/node':
@@ -1207,6 +1253,9 @@ packages:
 
   '@standard-schema/spec@1.1.0':
     resolution: {integrity: sha512-l2aFy5jALhniG5HgqrD6jXLi/rUWrKvqN/qJx6yoJsgKhblVd+iqqU4RCXavm/jPityDo5TCvKMnpjKnOriy0w==}
+
+  '@testcontainers/mariadb@12.2.1':
+    resolution: {integrity: sha512-Ch22Ha4N+TbNsDC6gW7Qxsd0NAXtcteMLRY6h0iQqW+Sr5aqOOuJSmgqi5yi0tbqaO6N4OW8HXC9gUl3bAGyKA==}
 
   '@testcontainers/postgresql@12.2.1':
     resolution: {integrity: sha512-MIbI5KjZ9M4SY4+xzxg/w4ZLBeV+Jd6ognXoWn7dh/mhIhBbn7ss0MiZHNg2XbCbu03BW9YQ9+H9xW8PFkJWaA==}
@@ -4208,6 +4257,15 @@ snapshots:
       tslib: 2.9.1
 
   '@standard-schema/spec@1.1.0': {}
+
+  '@testcontainers/mariadb@12.2.1(bare-buffer@3.7.1)':
+    dependencies:
+      testcontainers: 12.2.1(bare-buffer@3.7.1)
+    transitivePeerDependencies:
+      - bare-abort-controller
+      - bare-buffer
+      - react-native-b4a
+      - supports-color
 
   '@testcontainers/postgresql@12.2.1(bare-buffer@3.7.1)':
     dependencies:
