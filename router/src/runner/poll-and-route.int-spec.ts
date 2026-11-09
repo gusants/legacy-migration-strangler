@@ -78,13 +78,13 @@ describe('router flow against ElasticMQ', () => {
     queues = await startElasticMq();
     directory = await mkdtemp(join(tmpdir(), 'router-int-'));
     routingPath = join(directory, 'routing.json');
-    deps = buildDependencies(queues, routingPath, errors);
   });
 
   beforeEach(async () => {
     errors.length = 0;
     await queues.purgeAll();
     await writeFile(routingPath, '{"mode":"legacy"}');
+    deps = buildDependencies(queues, routingPath, errors);
   });
 
   afterAll(async () => {
@@ -121,6 +121,22 @@ describe('router flow against ElasticMQ', () => {
     await waitUntil(async () => (await queues.visibleCount('charges-incoming')) === 1, 5000);
     await expect(queues.drain('charges-new')).resolves.toEqual([]);
     await expect(queues.drain('charges-legacy')).resolves.toEqual([]);
+  });
+
+  it('keeps routing to legacy with the last valid config when the file becomes invalid', async () => {
+    await queues.send('charges-incoming', chargeBody('flow-before'));
+    await pollAndRouteOnce(deps, new AbortController().signal);
+    await writeFile(routingPath, '{"mode": broken');
+    await queues.send('charges-incoming', chargeBody('flow-after'));
+
+    await pollAndRouteOnce(deps, new AbortController().signal);
+
+    const forwarded = await queues.drain('charges-legacy');
+    expect(forwarded.map(({ Body }) => Body)).toEqual([chargeBody('flow-before'), chargeBody('flow-after')]);
+    expect(errors).toEqual([
+      expect.objectContaining({ event: 'config_invalid_using_last_valid', affectedRecords: 1 }),
+    ]);
+    await expect(queues.visibleCount('charges-incoming')).resolves.toBe(0);
   });
 
   it('sends invalid JSON to the incoming DLQ after 5 receives while valid messages flow through', async () => {
