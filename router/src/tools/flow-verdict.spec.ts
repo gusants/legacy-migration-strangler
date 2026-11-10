@@ -11,8 +11,18 @@ import {
 
 const quietQueues: QueueSnapshot = { incomingDlq: 7, legacyDlq: 4, newDlq: 2, incomingPending: 0 };
 
-const primary = (messageId: string, destination: Service): RoutedCopy => ({ messageId, role: 'primary', destination });
-const shadow = (messageId: string): RoutedCopy => ({ messageId, role: 'shadow', destination: 'new' });
+const primary = (messageId: string, destination: Service, chargeId = `ch_${messageId}`): RoutedCopy => ({
+  messageId,
+  chargeId,
+  role: 'primary',
+  destination,
+});
+const shadow = (messageId: string): RoutedCopy => ({
+  messageId,
+  chargeId: `ch_${messageId}`,
+  role: 'shadow',
+  destination: 'new',
+});
 
 const intactEvidence = (overrides: Partial<FlowEvidence> = {}): FlowEvidence => ({
   expectedIds: ['a', 'b', 'c'],
@@ -73,6 +83,29 @@ describe('flow verdict', () => {
 
     expect(verdict.shadow.unexpected).toEqual(['c']);
     expect(isFlowIntact(verdict)).toBe(false);
+  });
+
+  it('counts charges with several messages and accepts them when they share one service', () => {
+    const verdict = judgeFlow(
+      intactEvidence({
+        routedCopies: [primary('a', 'legacy', 'shared'), primary('b', 'legacy', 'shared'), primary('c', 'new'), shadow('a'), shadow('b')],
+      }),
+    );
+
+    expect(verdict.chargesWithSeveralMessages).toBe(1);
+    expect(verdict.chargesSplitAcrossServices).toEqual([]);
+    expect(isFlowIntact(verdict)).toBe(true);
+  });
+
+  it('fails when the messages of one charge were sent to different services', () => {
+    const verdict = judgeFlow(
+      intactEvidence({
+        routedCopies: [primary('a', 'legacy', 'shared'), primary('b', 'new', 'shared'), primary('c', 'new'), shadow('a')],
+      }),
+    );
+
+    expect(verdict.chargesSplitAcrossServices).toEqual(['shared']);
+    expect(failedChecks(verdict)).toContain('charges whose messages the router sent to different services');
   });
 
   it('detects duplicate delivery that the database hides, by the router log', () => {

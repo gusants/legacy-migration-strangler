@@ -8,7 +8,7 @@ const run = promisify(execFile);
 const REPOSITORY_ROOT = fileURLToPath(new URL('../../..', import.meta.url));
 const MAX_LOG_BYTES = 256 * 1024 * 1024;
 
-type LogEntry = { event?: unknown; role?: unknown; destination?: unknown; messageId?: unknown };
+type LogEntry = { event?: unknown; role?: unknown; destination?: unknown; messageId?: unknown; chargeId?: unknown };
 
 const parseJsonLine = (line: string): LogEntry | undefined => {
   const start = line.indexOf('{');
@@ -27,9 +27,9 @@ const isService = (value: unknown): value is RoutedCopy['destination'] => value 
 const belongsToRun = (messageId: unknown, prefix: string): messageId is string =>
   typeof messageId === 'string' && messageId.startsWith(prefix);
 
-const asRoutedCopy = ({ messageId, role, destination }: LogEntry, prefix: string): RoutedCopy[] => {
-  if (!belongsToRun(messageId, prefix) || !isRole(role)) return [];
-  return isService(destination) ? [{ messageId, role, destination }] : [];
+const asRoutedCopy = ({ messageId, chargeId, role, destination }: LogEntry, prefix: string): RoutedCopy[] => {
+  if (!belongsToRun(messageId, prefix) || typeof chargeId !== 'string' || !isRole(role)) return [];
+  return isService(destination) ? [{ messageId, chargeId, role, destination }] : [];
 };
 
 const toRoutedCopy = (entry: LogEntry | undefined, messageIdPrefix: string): RoutedCopy[] =>

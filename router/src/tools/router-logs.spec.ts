@@ -14,10 +14,10 @@ describe('parseRoutedCopies', () => {
     ].join('\n');
 
     expect(parseRoutedCopies(logs, 'run1_')).toEqual([
-      { messageId: 'run1_0', role: 'primary', destination: 'legacy' },
-      { messageId: 'run1_1', role: 'primary', destination: 'new' },
-      { messageId: 'run1_0', role: 'shadow', destination: 'new' },
-      { messageId: 'run1_0', role: 'primary', destination: 'legacy' },
+      { messageId: 'run1_0', chargeId: 'c', role: 'primary', destination: 'legacy' },
+      { messageId: 'run1_1', chargeId: 'c', role: 'primary', destination: 'new' },
+      { messageId: 'run1_0', chargeId: 'c', role: 'shadow', destination: 'new' },
+      { messageId: 'run1_0', chargeId: 'c', role: 'primary', destination: 'legacy' },
     ]);
   });
 
@@ -28,6 +28,7 @@ describe('parseRoutedCopies', () => {
       routed('run1_2', 'primary', 'mainframe'),
       JSON.stringify({ event: 'batch_done', messageId: 'run1_3', role: 'primary', destination: 'legacy' }),
       JSON.stringify({ event: 'routed', messageId: 7, role: 'primary', destination: 'legacy' }),
+      JSON.stringify({ event: 'routed', messageId: 'run1_4', role: 'primary', destination: 'legacy' }),
       'not json {',
       'plain text',
       '{"event":"routed"',
@@ -38,7 +39,7 @@ describe('parseRoutedCopies', () => {
 
   it('tolerates a compose log prefix before the JSON', () => {
     expect(parseRoutedCopies(`router-1  | ${routed('run1_0')}`, 'run1_')).toEqual([
-      { messageId: 'run1_0', role: 'primary', destination: 'legacy' },
+      { messageId: 'run1_0', chargeId: 'c', role: 'primary', destination: 'legacy' },
     ]);
   });
 });

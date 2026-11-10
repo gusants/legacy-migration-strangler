@@ -16,6 +16,24 @@ describe('generateCharges', () => {
     expect(charges.every(({ messageId }) => messageId.startsWith('abc_'))).toBe(true);
   });
 
+  it('gives some charges several messages while every messageId stays unique', () => {
+    const charges = generateCharges(100, 7, 'abc');
+    const messagesByCharge = Map.groupBy(charges, ({ chargeId }) => chargeId);
+    const shared = [...messagesByCharge.values()].filter((messages) => messages.length > 1);
+
+    expect(shared).toHaveLength(10);
+    expect(shared.every((messages) => messages.length === 2)).toBe(true);
+    expect(new Set(charges.map(({ messageId }) => messageId)).size).toBe(100);
+  });
+
+  it('keeps the chargeId format ch_<run id>_<index> for every message', () => {
+    const charges = generateCharges(30, 7, 'abc');
+
+    expect(charges.every(({ chargeId }) => /^ch_abc_\d+$/.test(chargeId))).toBe(true);
+    expect(charges[9]?.chargeId).toBe('ch_abc_8');
+    expect(charges[10]?.chargeId).toBe('ch_abc_10');
+  });
+
   it('starts with the document examples followed by the boundary cases', () => {
     const [first, , , , long, rounding, halfCent] = generateCharges(7, 1, 'r');
 

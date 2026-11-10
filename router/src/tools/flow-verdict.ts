@@ -9,6 +9,7 @@ export type Service = 'legacy' | 'new';
 
 export type RoutedCopy = {
   messageId: string;
+  chargeId: string;
   role: 'primary' | 'shadow';
   destination: Service;
 };
@@ -40,6 +41,8 @@ export type FlowVerdict = {
   notRouted: string[];
   routedMoreThanOnce: string[];
   routedUnexpected: string[];
+  chargesWithSeveralMessages: number;
+  chargesSplitAcrossServices: string[];
   invalidInjected: number;
   incomingDlqGrowth: number;
   legacyDlqGrowth: number;
@@ -67,6 +70,20 @@ const idsOf = (copies: readonly RoutedCopy[], role: RoutedCopy['role'], destinat
     .filter((copy) => copy.role === role && (destination === undefined || copy.destination === destination))
     .map(({ messageId }) => messageId);
 
+const servicesByCharge = (copies: readonly RoutedCopy[]): Map<string, Set<Service>> =>
+  copies
+    .filter(({ role }) => role === 'primary')
+    .reduce(
+      (services, { chargeId, destination }) =>
+        services.set(chargeId, (services.get(chargeId) ?? new Set<Service>()).add(destination)),
+      new Map<string, Set<Service>>(),
+    );
+
+const messageCountByCharge = (copies: readonly RoutedCopy[]): Map<string, number> =>
+  copies
+    .filter(({ role }) => role === 'primary')
+    .reduce((counts, { chargeId }) => counts.set(chargeId, (counts.get(chargeId) ?? 0) + 1), new Map<string, number>());
+
 export const judgeFlow = (evidence: FlowEvidence): FlowVerdict => {
   const expected = new Set(evidence.expectedIds);
   const primaryCounts = countById(idsOf(evidence.routedCopies, 'primary'));
@@ -83,6 +100,10 @@ export const judgeFlow = (evidence: FlowEvidence): FlowVerdict => {
     notRouted: evidence.expectedIds.filter((id) => !primaryCounts.has(id)),
     routedMoreThanOnce: [...primaryCounts].filter(([, times]) => times > 1).map(([id]) => id),
     routedUnexpected: [...primaryCounts.keys()].filter((id) => !expected.has(id)),
+    chargesWithSeveralMessages: [...messageCountByCharge(evidence.routedCopies).values()].filter((count) => count > 1).length,
+    chargesSplitAcrossServices: [...servicesByCharge(evidence.routedCopies)]
+      .filter(([, services]) => services.size > 1)
+      .map(([chargeId]) => chargeId),
     invalidInjected: evidence.invalidInjected,
     incomingDlqGrowth: evidence.after.incomingDlq - evidence.before.incomingDlq,
     legacyDlqGrowth: evidence.after.legacyDlq - evidence.before.legacyDlq,
@@ -106,6 +127,7 @@ export const failedChecks = (verdict: FlowVerdict): string[] =>
       ['valid messages never routed by the router', verdict.notRouted.length === 0],
       ['messages routed more than once by the router', verdict.routedMoreThanOnce.length === 0],
       ['routed messages this run did not produce', verdict.routedUnexpected.length === 0],
+      ['charges whose messages the router sent to different services', verdict.chargesSplitAcrossServices.length === 0],
       ['charges-legacy-dlq grew', verdict.legacyDlqGrowth === 0],
       ['charges-new-dlq grew', verdict.newDlqGrowth === 0],
       [
@@ -131,6 +153,7 @@ const describeTable = (label: string, table: TableVerdict): string =>
 
 const provenStatement = (verdict: FlowVerdict): string =>
   `${verdict.expected} valid messages, each routed exactly once (router log, one primary "routed" event per messageId), ` +
+  `${verdict.chargesWithSeveralMessages} charges with several messages, none split across services, ` +
   `${verdict.legacy.rows} in the legacy official table and ${verdict.new.rows} in the new official table, ` +
   `${verdict.shadow.rows} shadow copies in the shadow table, ` +
   `charges-legacy-dlq and charges-new-dlq did not grow, ` +
@@ -146,7 +169,9 @@ export const describeVerdict = (verdict: FlowVerdict, runId: string): string => 
     describeTable('new database shadow (charge_results_shadow)', verdict.shadow),
     `router log: not_routed=${verdict.notRouted.length} (${sample(verdict.notRouted)}) ` +
       `routed_more_than_once=${verdict.routedMoreThanOnce.length} (${sample(verdict.routedMoreThanOnce)}) ` +
-      `routed_unexpected=${verdict.routedUnexpected.length} (${sample(verdict.routedUnexpected)})`,
+      `routed_unexpected=${verdict.routedUnexpected.length} (${sample(verdict.routedUnexpected)}) ` +
+      `charges_with_several_messages=${verdict.chargesWithSeveralMessages} ` +
+      `charges_split_across_services=${verdict.chargesSplitAcrossServices.length} (${sample(verdict.chargesSplitAcrossServices)})`,
     `dead letters: charges-incoming-dlq +${verdict.incomingDlqGrowth} (expected +${verdict.invalidInjected}) ` +
       `charges-legacy-dlq +${verdict.legacyDlqGrowth} (expected +0) ` +
       `charges-new-dlq +${verdict.newDlqGrowth} (expected +0) ` +

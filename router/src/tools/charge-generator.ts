@@ -20,6 +20,7 @@ const RANDOM_AMOUNT_MIN_CENTS = 100;
 const RANDOM_AMOUNT_SPREAD_CENTS = 500_000;
 const RANDOM_MAX_FAILED_ATTEMPTS = 5;
 const MILLISECONDS_PER_DAY = 86_400_000;
+const MESSAGES_PER_SHARED_CHARGE_GROUP = 10;
 
 const template = (
   amountCents: number,
@@ -94,11 +95,16 @@ const randomTemplate = (random: () => number): ChargeTemplate => {
   };
 };
 
+const chargeIdOf = (runId: string, index: number): string => {
+  const sharesChargeWithPrevious = index % MESSAGES_PER_SHARED_CHARGE_GROUP === MESSAGES_PER_SHARED_CHARGE_GROUP - 1;
+  return `ch_${runId}_${sharesChargeWithPrevious ? index - 1 : index}`;
+};
+
 export const generateCharges = (count: number, seed: number, runId: string): GeneratedCharge[] => {
   const random = mulberry32(seed);
   return Array.from({ length: count }, (_, index) => ({
     messageId: `${runId}_${index}`,
-    chargeId: `ch_${runId}_${index}`,
+    chargeId: chargeIdOf(runId, index),
     ...(fixedTemplates[index] ?? randomTemplate(random)),
   }));
 };
