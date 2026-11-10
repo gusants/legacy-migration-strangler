@@ -8,6 +8,7 @@ const handlerEnvSchema = z.object({
   LEGACY_QUEUE_URL: z.url().optional(),
   NEW_QUEUE_URL: z.url().optional(),
   ROUTING_CONFIG_PATH: z.string().min(1).default('config/routing.json'),
+  ROUTING_LEDGER_DATABASE_URL: z.string().min(1),
 });
 
 const runnerEnvSchema = handlerEnvSchema.extend({
@@ -18,6 +19,7 @@ export type HandlerEnv = {
   endpoint: string | undefined;
   region: string;
   routingConfigPath: string;
+  ledgerDatabaseUrl: string;
   queueUrls: { legacy: string; new: string };
 };
 
@@ -44,6 +46,7 @@ const toHandlerEnv = (env: z.infer<typeof handlerEnvSchema>): HandlerEnv => {
     endpoint,
     region: env.AWS_REGION,
     routingConfigPath: env.ROUTING_CONFIG_PATH,
+    ledgerDatabaseUrl: env.ROUTING_LEDGER_DATABASE_URL,
     queueUrls: {
       legacy: resolveQueueUrl(env.LEGACY_QUEUE_URL, endpoint, 'charges-legacy', 'LEGACY_QUEUE_URL'),
       new: resolveQueueUrl(env.NEW_QUEUE_URL, endpoint, 'charges-new', 'NEW_QUEUE_URL'),

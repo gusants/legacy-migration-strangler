@@ -75,12 +75,15 @@ services:
       AWS_ACCESS_KEY_ID: local
       AWS_SECRET_ACCESS_KEY: local
       ROUTING_CONFIG_PATH: /etc/router/routing.json
+      ROUTING_LEDGER_DATABASE_URL: postgresql://${NEW_DB_USER}:${NEW_DB_PASSWORD}@new-db:5432/${NEW_DB_NAME}
     volumes:
       # directory mount: replacing routing.json by rename (pnpm routing:set) is visible inside the container
       - ./router/config:/etc/router:ro
     depends_on:
       elasticmq:
         condition: service_started
+      new-db:
+        condition: service_healthy
 
   new-db:
     image: postgres:17-alpine

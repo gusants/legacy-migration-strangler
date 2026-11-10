@@ -1,17 +1,23 @@
+import { Pool } from 'pg';
 import { createSqsClient } from './config/create-sqs-client.js';
 import { loadRunnerEnv } from './config/env.js';
 import { createHandler } from './handler.js';
+import { PostgresRoutingLedger } from './ledger/postgres-routing-ledger.js';
 import { jsonLogger } from './logging/logger.js';
 import { SqsQueueConsumer } from './queue/sqs-queue-consumer.js';
 import { SqsQueueSender } from './queue/sqs-queue-sender.js';
 import { FileRoutingConfigProvider } from './routing/file-routing-config-provider.js';
 import { LastValidRoutingConfigResolver } from './routing/last-valid-routing-config-resolver.js';
+import { createLedgerRoutePlanner } from './routing/ledger-route-planner.js';
 import { pureRoutePlanner } from './routing/pure-route-planner.js';
 import { runUntilAborted } from './runner/poll-and-route.js';
 
 const main = async (): Promise<void> => {
   const env = loadRunnerEnv(process.env);
   const client = createSqsClient(env);
+  const pool = new Pool({ connectionString: env.ledgerDatabaseUrl });
+  const ledger = new PostgresRoutingLedger(pool);
+  await ledger.ensureSchema();
   const shutdown = new AbortController();
   for (const signal of ['SIGTERM', 'SIGINT'] as const) {
     process.once(signal, () => {
@@ -26,7 +32,7 @@ const main = async (): Promise<void> => {
       consumer: new SqsQueueConsumer(client),
       handler: createHandler({
         configResolver: new LastValidRoutingConfigResolver(new FileRoutingConfigProvider(env.routingConfigPath)),
-        planner: pureRoutePlanner,
+        planner: createLedgerRoutePlanner(pureRoutePlanner, ledger),
         sender: new SqsQueueSender(client),
         queueUrls: env.queueUrls,
         logger: jsonLogger,
@@ -38,6 +44,7 @@ const main = async (): Promise<void> => {
     },
     shutdown.signal,
   );
+  await pool.end();
   jsonLogger.info({ event: 'runner_stopped' });
 };
 

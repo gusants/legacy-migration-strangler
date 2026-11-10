@@ -20,3 +20,10 @@ export class DuplicateRouteQueueError extends Error {
     this.name = 'DuplicateRouteQueueError';
   }
 }
+
+export class MissingPrimaryTargetError extends Error {
+  constructor() {
+    super('routing plan has no primary target');
+    this.name = 'MissingPrimaryTargetError';
+  }
+}
