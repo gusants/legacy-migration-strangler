@@ -1,7 +1,7 @@
-import { Pool } from 'pg';
 import { createSqsClient } from './config/create-sqs-client.js';
 import { loadHandlerEnv } from './config/env.js';
 import { createHandler } from './handler.js';
+import { createLedgerPool, LAMBDA_LEDGER_POOL_SIZE } from './ledger/create-ledger-pool.js';
 import { PostgresRoutingLedger } from './ledger/postgres-routing-ledger.js';
 import { jsonLogger } from './logging/logger.js';
 import { SqsQueueSender } from './queue/sqs-queue-sender.js';
@@ -11,7 +11,9 @@ import { createLedgerRoutePlanner } from './routing/ledger-route-planner.js';
 import { pureRoutePlanner } from './routing/pure-route-planner.js';
 
 const env = loadHandlerEnv(process.env);
-const ledger = new PostgresRoutingLedger(new Pool({ connectionString: env.ledgerDatabaseUrl }));
+const ledger = new PostgresRoutingLedger(
+  createLedgerPool(env.ledgerDatabaseUrl, LAMBDA_LEDGER_POOL_SIZE, jsonLogger),
+);
 await ledger.ensureSchema();
 
 export const handler = createHandler({

@@ -1,7 +1,7 @@
-import { Pool } from 'pg';
 import { createSqsClient } from './config/create-sqs-client.js';
 import { loadRunnerEnv } from './config/env.js';
 import { createHandler } from './handler.js';
+import { createLedgerPool, RUNNER_LEDGER_POOL_SIZE } from './ledger/create-ledger-pool.js';
 import { PostgresRoutingLedger } from './ledger/postgres-routing-ledger.js';
 import { jsonLogger } from './logging/logger.js';
 import { SqsQueueConsumer } from './queue/sqs-queue-consumer.js';
@@ -15,7 +15,7 @@ import { runUntilAborted } from './runner/poll-and-route.js';
 const main = async (): Promise<void> => {
   const env = loadRunnerEnv(process.env);
   const client = createSqsClient(env);
-  const pool = new Pool({ connectionString: env.ledgerDatabaseUrl });
+  const pool = createLedgerPool(env.ledgerDatabaseUrl, RUNNER_LEDGER_POOL_SIZE, jsonLogger);
   const ledger = new PostgresRoutingLedger(pool);
   await ledger.ensureSchema();
   const shutdown = new AbortController();
