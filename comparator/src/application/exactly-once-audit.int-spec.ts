@@ -15,7 +15,7 @@ const audit = (runId: string, expectedCount: number, announced: string[] = []) =
     {
       legacyOfficialReader: new MariaDbLegacyReader(databases.legacy),
       newOfficialReader: new PostgresShadowReader(databases.shadow, 'charge_results'),
-      ledgerReader: new PostgresRoutingLedgerReader(databases.shadow),
+      ledgerReader: new PostgresRoutingLedgerReader(databases.ledger),
       announcedRejectionsReader: { read: async () => announced },
       now: () => new Date(),
     },

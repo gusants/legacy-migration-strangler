@@ -75,15 +75,34 @@ services:
       AWS_ACCESS_KEY_ID: local
       AWS_SECRET_ACCESS_KEY: local
       ROUTING_CONFIG_PATH: /etc/router/routing.json
-      ROUTING_LEDGER_DATABASE_URL: postgresql://${NEW_DB_USER}:${NEW_DB_PASSWORD}@new-db:5432/${NEW_DB_NAME}
+      ROUTING_LEDGER_DATABASE_URL: postgresql://${ROUTER_DB_USER:-router}:${ROUTER_DB_PASSWORD:-router}@router-db:5432/${ROUTER_DB_NAME:-router}
     volumes:
       # directory mount: replacing routing.json by rename (pnpm routing:set) is visible inside the container
       - ./router/config:/etc/router:ro
     depends_on:
       elasticmq:
         condition: service_started
-      new-db:
+      router-db:
         condition: service_healthy
+
+  router-db:
+    # the routing ledger lives here, isolated from both services' databases so that
+    # an outage of either one never stops the router
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${ROUTER_DB_USER:-router}
+      POSTGRES_PASSWORD: ${ROUTER_DB_PASSWORD:-router}
+      POSTGRES_DB: ${ROUTER_DB_NAME:-router}
+    ports:
+      - "${ROUTER_DB_PORT:-5434}:5432"
+    volumes:
+      - router-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${ROUTER_DB_USER:-router} -d ${ROUTER_DB_NAME:-router}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
   new-db:
     image: postgres:17-alpine
@@ -133,3 +152,4 @@ services:
 volumes:
   legacy-db-data:
   new-db-data:
+  router-db-data:

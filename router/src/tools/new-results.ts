@@ -28,14 +28,30 @@ export const connectNewDatabase = async (): Promise<Client> => {
   }
 };
 
-export const storedNewMessageIds = async (
-  client: Client,
-  table: NewResultsTable,
-  runId: string,
-): Promise<string[]> => {
+export type NewResults = {
+  storedIds(table: NewResultsTable, runId: string): Promise<string[]>;
+  close(): Promise<void>;
+};
+
+const storedNewMessageIds = async (client: Client, table: NewResultsTable, runId: string): Promise<string[]> => {
   const { rows } = await client.query<{ message_id: string }>(
     `SELECT message_id FROM ${table} WHERE message_id LIKE $1`,
     [`${runId}\\_%`],
   );
   return rows.map((row) => row.message_id);
+};
+
+const NO_NEW_RESULTS: NewResults = { storedIds: async () => [], close: async () => undefined };
+
+export const connectNewResults = async ({ optional }: { optional: boolean }): Promise<NewResults> => {
+  try {
+    const client = await connectNewDatabase();
+    return {
+      storedIds: (table, runId) => storedNewMessageIds(client, table, runId),
+      close: () => client.end(),
+    };
+  } catch (error) {
+    if (!optional) throw error;
+    return NO_NEW_RESULTS;
+  }
 };

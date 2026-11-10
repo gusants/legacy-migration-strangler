@@ -186,7 +186,7 @@ jobs:
       - name: Start queue, legacy and router
         run: |
           cp .env.example .env
-          docker compose up -d --build --wait elasticmq legacy-db legacy legacy-worker router
+          docker compose up -d --build --wait elasticmq legacy-db legacy legacy-worker router-db router
 
       - name: Wait for the queues to exist
         run: |
@@ -233,7 +233,7 @@ jobs:
       - name: Start queue, legacy, new service and router
         run: |
           cp .env.example .env
-          docker compose up -d --build --wait elasticmq legacy-db legacy legacy-worker new-db new router
+          docker compose up -d --build --wait elasticmq legacy-db legacy legacy-worker router-db new-db new router
 
       - name: Wait for the queues to exist
         run: |
@@ -316,7 +316,7 @@ jobs:
       - name: Start queue, legacy, new service and router
         run: |
           cp .env.example .env
-          docker compose up -d --build --wait elasticmq legacy-db legacy legacy-worker new-db new router
+          docker compose up -d --build --wait elasticmq legacy-db legacy legacy-worker router-db new-db new router
 
       - name: Wait for the queues to exist
         run: |

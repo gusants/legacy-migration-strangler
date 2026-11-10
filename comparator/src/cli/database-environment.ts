@@ -13,6 +13,11 @@ const environmentSchema = z.object({
   NEW_DB_NAME: z.string().default('charges'),
   NEW_DB_USER: z.string().default('charges'),
   NEW_DB_PASSWORD: z.string().default('charges'),
+  ROUTER_DB_HOST: z.string().default('127.0.0.1'),
+  ROUTER_DB_PORT: portSchema.default(5434),
+  ROUTER_DB_NAME: z.string().default('router'),
+  ROUTER_DB_USER: z.string().default('router'),
+  ROUTER_DB_PASSWORD: z.string().default('router'),
 });
 
 export type DatabaseConnection = {
@@ -23,7 +28,11 @@ export type DatabaseConnection = {
   password: string;
 };
 
-export type DatabaseEnvironment = { legacy: DatabaseConnection; shadow: DatabaseConnection };
+export type DatabaseEnvironment = {
+  legacy: DatabaseConnection;
+  shadow: DatabaseConnection;
+  ledger: DatabaseConnection;
+};
 
 export const loadDatabaseEnvironment = (source: Record<string, string | undefined>): DatabaseEnvironment => {
   const env = environmentSchema.parse(source);
@@ -41,6 +50,13 @@ export const loadDatabaseEnvironment = (source: Record<string, string | undefine
       database: env.NEW_DB_NAME,
       user: env.NEW_DB_USER,
       password: env.NEW_DB_PASSWORD,
+    },
+    ledger: {
+      host: env.ROUTER_DB_HOST,
+      port: env.ROUTER_DB_PORT,
+      database: env.ROUTER_DB_NAME,
+      user: env.ROUTER_DB_USER,
+      password: env.ROUTER_DB_PASSWORD,
     },
   };
 };

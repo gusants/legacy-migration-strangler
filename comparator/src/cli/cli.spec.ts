@@ -39,6 +39,7 @@ describe('loadDatabaseEnvironment', () => {
     expect(loadDatabaseEnvironment({})).toEqual({
       legacy: { host: '127.0.0.1', port: 3307, database: 'legacy', user: 'legacy', password: 'legacy' },
       shadow: { host: '127.0.0.1', port: 5433, database: 'charges', user: 'charges', password: 'charges' },
+      ledger: { host: '127.0.0.1', port: 5434, database: 'router', user: 'router', password: 'router' },
     });
   });
 
@@ -47,6 +48,12 @@ describe('loadDatabaseEnvironment', () => {
 
     expect(legacy.port).toBe(4000);
     expect(shadow).toMatchObject({ host: 'db', database: 'x' });
+  });
+
+  it('reads the ledger connection from the router database variables, not the new service ones', () => {
+    const { ledger } = loadDatabaseEnvironment({ NEW_DB_HOST: 'new', ROUTER_DB_HOST: 'router-db', ROUTER_DB_PORT: '5999' });
+
+    expect(ledger).toMatchObject({ host: 'router-db', port: 5999 });
   });
 
   it('rejects an invalid port', () => {

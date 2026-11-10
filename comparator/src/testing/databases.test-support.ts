@@ -26,6 +26,7 @@ const ROUTING_LEDGER_DDL = `
 export type TestDatabases = {
   legacy: DatabaseConnection;
   shadow: DatabaseConnection;
+  ledger: DatabaseConnection;
   insertLegacy(result: ChargeResult, rawPayload?: string): Promise<void>;
   insertShadow(result: ChargeResult): Promise<void>;
   insertOfficial(result: ChargeResult): Promise<void>;
@@ -62,12 +63,14 @@ const withPostgres = async <T>(connection: DatabaseConnection, work: (client: pg
 };
 
 export const startDatabases = async (): Promise<TestDatabases> => {
-  const [mariadb, postgres] = await Promise.all([
+  const [mariadb, postgres, routerPostgres] = await Promise.all([
     new MariaDbContainer('mariadb:10.11').start(),
+    new PostgreSqlContainer('postgres:17-alpine').start(),
     new PostgreSqlContainer('postgres:17-alpine').start(),
   ]);
   const legacy = connectionOf(mariadb, mariadb.getUserPassword());
   const shadow = connectionOf(postgres, postgres.getPassword());
+  const ledger = connectionOf(routerPostgres, routerPostgres.getPassword());
 
   const legacyConnection = await createConnection(legacy);
   await legacyConnection.query(readFileSync(LEGACY_SCHEMA, 'utf8'));
@@ -75,8 +78,8 @@ export const startDatabases = async (): Promise<TestDatabases> => {
   await withPostgres(shadow, async (client) => {
     await client.query(migration(OFFICIAL_MIGRATION_SUFFIX));
     await client.query(migration(SHADOW_MIGRATION_SUFFIX));
-    await client.query(ROUTING_LEDGER_DDL);
   });
+  await withPostgres(ledger, (client) => client.query(ROUTING_LEDGER_DDL));
 
   const insertResult = (table: 'charge_results' | 'charge_results_shadow', result: ChargeResult): Promise<void> =>
     withPostgres(shadow, async (client) => {
@@ -99,6 +102,7 @@ export const startDatabases = async (): Promise<TestDatabases> => {
   return {
     legacy,
     shadow,
+    ledger,
     insertLegacy: async (result, rawPayload) => {
       const connection = await createConnection(legacy);
       await connection.query(
@@ -120,7 +124,7 @@ export const startDatabases = async (): Promise<TestDatabases> => {
     insertShadow: (result) => insertResult('charge_results_shadow', result),
     insertOfficial: (result) => insertResult('charge_results', result),
     insertLedger: (entry) =>
-      withPostgres(shadow, async (client) => {
+      withPostgres(ledger, async (client) => {
         await client.query(
           'INSERT INTO router.routing_ledger (message_id, service, routing_mode, created_at) VALUES ($1, $2, $3, $4)',
           [entry.messageId, entry.service, entry.routingMode, entry.claimedAt],
@@ -130,10 +134,11 @@ export const startDatabases = async (): Promise<TestDatabases> => {
       const connection = await createConnection(legacy);
       await connection.query('TRUNCATE TABLE charge_results');
       await connection.end();
-      await withPostgres(shadow, (client) => client.query('TRUNCATE TABLE charge_results, charge_results_shadow, router.routing_ledger'));
+      await withPostgres(shadow, (client) => client.query('TRUNCATE TABLE charge_results, charge_results_shadow'));
+      await withPostgres(ledger, (client) => client.query('TRUNCATE TABLE router.routing_ledger'));
     },
     stop: async () => {
-      await Promise.all([mariadb.stop(), postgres.stop()]);
+      await Promise.all([mariadb.stop(), postgres.stop(), routerPostgres.stop()]);
     },
   };
 };

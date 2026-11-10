@@ -27,7 +27,7 @@ const audit = async (): Promise<number> => {
     {
       legacyOfficialReader: new MariaDbLegacyReader(databases.legacy),
       newOfficialReader: new PostgresShadowReader(databases.shadow, 'charge_results'),
-      ledgerReader: new PostgresRoutingLedgerReader(databases.shadow),
+      ledgerReader: new PostgresRoutingLedgerReader(databases.ledger),
       announcedRejectionsReader: new RouterLogRejectionsReader(REPOSITORY_ROOT),
       now: () => new Date(),
     },
