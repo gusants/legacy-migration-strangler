@@ -1,5 +1,7 @@
 export type PlanType = 'monthly' | 'yearly';
 
+export type PaymentMethod = 'pix' | 'boleto' | 'card';
+
 export type ChargeStatus = 'paid_on_time' | 'paid_late' | 'overdue' | 'uncollectible';
 
 export interface ChargeMessage {
@@ -11,6 +13,7 @@ export interface ChargeMessage {
   paid: boolean;
   planType: PlanType;
   failedAttempts: number;
+  paymentMethod?: PaymentMethod;
 }
 
 export interface ChargeResult {
@@ -20,4 +23,5 @@ export interface ChargeResult {
   fineCents: number;
   interestCents: number;
   totalCents: number;
+  discountCents?: number;
 }
