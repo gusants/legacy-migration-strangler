@@ -26,6 +26,7 @@ const result = (overrides: Partial<ChargeResult> = {}): ChargeResult => ({
   daysLate: 10,
   fineCents: 200,
   interestCents: 33,
+  discountCents: 0,
   totalCents: 10_233,
   ...overrides,
 });
@@ -115,6 +116,14 @@ describe('PrismaChargeResultsRepository', () => {
 
       expect(new Set(saved.map((entry) => entry.totalCents)).size).toBe(1);
       expect(await countRows(table)).toBe(1);
+    });
+
+    it('round-trips the discount', async () => {
+      const discounted = result({ status: 'paid_on_time', fineCents: 0, interestCents: 0, discountCents: 500, totalCents: 9_500 });
+
+      expect(
+        await repository.saveIfAbsent(message({ messageId: 'pix' }), discounted),
+      ).toEqual(discounted);
     });
 
     it('round-trips amounts above the 32-bit range', async () => {

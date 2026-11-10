@@ -30,6 +30,7 @@ const paidLate: ChargeResult = {
   daysLate: 10,
   fineCents: 200,
   interestCents: 33,
+  discountCents: 0,
   totalCents: 10_233,
 };
 

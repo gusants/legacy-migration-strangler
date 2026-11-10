@@ -78,6 +78,7 @@ describe('processCharge', () => {
         daysLate,
         fineCents,
         interestCents,
+        discountCents: 0,
         totalCents,
       });
     },
@@ -93,6 +94,7 @@ describe('processCharge', () => {
       daysLate: 10,
       fineCents: 200,
       interestCents: 33,
+      discountCents: 0,
       totalCents: 10_233,
     });
   });
@@ -107,6 +109,7 @@ describe('processCharge', () => {
       daysLate: 0,
       fineCents: 0,
       interestCents: 0,
+      discountCents: 0,
       totalCents: 10_000,
     });
   });
@@ -115,5 +118,27 @@ describe('processCharge', () => {
     expect(
       processCharge(charge({ paid: false, failedAttempts: 3 })).status,
     ).toBe('uncollectible');
+  });
+
+  it('discounts a Pix payment on time from the total', () => {
+    expect(processCharge(charge({ paymentMethod: 'pix' }))).toMatchObject({
+      status: 'paid_on_time',
+      discountCents: 500,
+      totalCents: 9_500,
+    });
+  });
+
+  it('gives no discount to a late Pix payment', () => {
+    expect(
+      processCharge(charge({ paymentMethod: 'pix', referenceDate: utc('2026-10-11') })),
+    ).toMatchObject({ discountCents: 0, totalCents: 10_233 });
+  });
+
+  it('gives no discount to a yearly Pix payment within the grace period', () => {
+    expect(
+      processCharge(
+        charge({ paymentMethod: 'pix', planType: 'yearly', referenceDate: utc('2026-10-03') }),
+      ),
+    ).toMatchObject({ status: 'paid_late', discountCents: 0, totalCents: 10_000 });
   });
 });

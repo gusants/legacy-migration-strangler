@@ -34,4 +34,5 @@ export const chargeMessageSchema = z.object({
   paid: z.boolean(),
   planType: z.enum(['monthly', 'yearly']),
   failedAttempts: z.number().int().min(0),
+  paymentMethod: z.enum(['pix', 'boleto', 'card']).optional(),
 });

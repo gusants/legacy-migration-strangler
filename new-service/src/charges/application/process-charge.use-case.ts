@@ -14,6 +14,7 @@ const calculateResult = (message: ChargeMessage): ChargeResult => {
     paid: message.paid,
     planType: message.planType,
     failedAttempts: message.failedAttempts,
+    paymentMethod: message.paymentMethod,
   });
   return { chargeId: message.chargeId, ...outcome };
 };
