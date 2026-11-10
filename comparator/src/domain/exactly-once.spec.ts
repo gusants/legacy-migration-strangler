@@ -1,3 +1,4 @@
+import { ledgerMessageKeyOf } from './ledger-message-key.js';
 import { auditExactlyOnce, type ExactlyOnceInput, type LedgerEntry, type OfficialService } from './exactly-once.js';
 
 const NOW = new Date('2026-11-10T12:00:00.000Z');
@@ -5,7 +6,7 @@ const LONG_AGO = new Date('2026-11-10T11:00:00.000Z');
 const JUST_NOW = new Date('2026-11-10T11:59:59.000Z');
 
 const ledgerEntry = (messageId: string, service: OfficialService, claimedAt = LONG_AGO): LedgerEntry => ({
-  messageId,
+  messageKey: ledgerMessageKeyOf(messageId),
   service,
   routingMode: 'percentage',
   claimedAt,
@@ -127,5 +128,18 @@ describe('auditExactlyOnce', () => {
 
   it('ignores repeated expected ids', () => {
     expect(auditExactlyOnce(input({ expectedMessageIds: ['r_0', 'r_0', 'r_1'] })).expected).toBe(2);
+  });
+
+  it('joins ids with NUL or lone surrogates to their ledger row by the exact key, never by a lossy encoding', () => {
+    const ids = ['nul\u0000', 'lone\uD800', 'lone\uD801'];
+    const outcome = auditExactlyOnce(
+      input({
+        expectedMessageIds: ids,
+        officialIds: { legacy: ['nul\u0000', 'lone\uD800'], new: ['lone\uD801'] },
+        ledger: [ledgerEntry('nul\u0000', 'legacy'), ledgerEntry('lone\uD800', 'legacy'), ledgerEntry('lone\uD801', 'new')],
+      }),
+    );
+
+    expect(outcome).toMatchObject({ exactlyOnce: 3, ledgerMismatches: [], missing: [], pending: [] });
   });
 });

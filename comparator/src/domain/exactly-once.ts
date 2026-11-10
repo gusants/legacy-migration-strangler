@@ -1,7 +1,9 @@
+import { ledgerMessageKeyOf } from './ledger-message-key.js';
+
 export type OfficialService = 'legacy' | 'new';
 
 export type LedgerEntry = {
-  messageId: string;
+  messageKey: string;
   service: OfficialService;
   routingMode: string;
   claimedAt: Date;
@@ -107,13 +109,13 @@ export const auditExactlyOnce = (input: ExactlyOnceInput): ExactlyOnceOutcome =>
   const expected = new Set(input.expectedMessageIds);
   const legacyCounts = countById(input.officialIds.legacy);
   const newCounts = countById(input.officialIds.new);
-  const ledgerById = new Map(input.ledger.map((entry) => [entry.messageId, entry]));
+  const ledgerById = new Map(input.ledger.map((entry) => [entry.messageKey, entry]));
 
   const classifications = [...expected].map((messageId) =>
     classify(
       messageId,
       { legacy: legacyCounts.get(messageId) ?? 0, new: newCounts.get(messageId) ?? 0 },
-      ledgerById.get(messageId),
+      ledgerById.get(ledgerMessageKeyOf(messageId)),
       input,
     ),
   );
@@ -126,7 +128,7 @@ export const auditExactlyOnce = (input: ExactlyOnceInput): ExactlyOnceOutcome =>
     exactlyOnce: classifications.filter(({ kind }) => kind === 'exactly-once').length,
     found: countByService(single),
     ledgered: countByService(
-      [...expected].flatMap((messageId) => ledgerById.get(messageId)?.service ?? []),
+      [...expected].flatMap((messageId) => ledgerById.get(ledgerMessageKeyOf(messageId))?.service ?? []),
     ),
     missing: messageIdsOf(classifications, 'missing'),
     pending: messageIdsOf(classifications, 'pending'),

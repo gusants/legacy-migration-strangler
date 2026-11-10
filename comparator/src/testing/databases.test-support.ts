@@ -8,6 +8,7 @@ import pg from 'pg';
 import type { DatabaseConnection } from '../cli/database-environment.js';
 import type { ChargeResult } from '../domain/charge-result.js';
 import type { LedgerEntry } from '../domain/exactly-once.js';
+import { ledgerMessageKeyOf } from '../domain/ledger-message-key.js';
 
 const REPOSITORY_ROOT = fileURLToPath(new URL('../../../', import.meta.url));
 const LEGACY_SCHEMA = join(REPOSITORY_ROOT, 'legacy-service/sql/schema.sql');
@@ -17,11 +18,17 @@ const OFFICIAL_MIGRATION_SUFFIX = '_create_charge_results';
 const ROUTING_LEDGER_DDL = `
   CREATE SCHEMA IF NOT EXISTS router;
   CREATE TABLE IF NOT EXISTS router.routing_ledger (
-    message_id   text PRIMARY KEY,
+    message_key  text PRIMARY KEY,
+    message_id   text,
     service      text NOT NULL CHECK (service IN ('legacy', 'new')),
     routing_mode text NOT NULL,
     created_at   timestamptz NOT NULL DEFAULT now()
   )`;
+
+export type LedgerFixture = Omit<LedgerEntry, 'messageKey'> & { messageId: string };
+
+const readableMessageId = (messageId: string): string | null =>
+  messageId.isWellFormed() && !messageId.includes('\0') ? messageId : null;
 
 export type TestDatabases = {
   legacy: DatabaseConnection;
@@ -30,7 +37,7 @@ export type TestDatabases = {
   insertLegacy(result: ChargeResult, rawPayload?: string): Promise<void>;
   insertShadow(result: ChargeResult): Promise<void>;
   insertOfficial(result: ChargeResult): Promise<void>;
-  insertLedger(entry: LedgerEntry): Promise<void>;
+  insertLedger(entry: LedgerFixture): Promise<void>;
   reset(): Promise<void>;
   stop(): Promise<void>;
 };
@@ -126,8 +133,8 @@ export const startDatabases = async (): Promise<TestDatabases> => {
     insertLedger: (entry) =>
       withPostgres(ledger, async (client) => {
         await client.query(
-          'INSERT INTO router.routing_ledger (message_id, service, routing_mode, created_at) VALUES ($1, $2, $3, $4)',
-          [entry.messageId, entry.service, entry.routingMode, entry.claimedAt],
+          'INSERT INTO router.routing_ledger (message_key, message_id, service, routing_mode, created_at) VALUES ($1, $2, $3, $4, $5)',
+          [ledgerMessageKeyOf(entry.messageId), readableMessageId(entry.messageId), entry.service, entry.routingMode, entry.claimedAt],
         );
       }),
     reset: async () => {

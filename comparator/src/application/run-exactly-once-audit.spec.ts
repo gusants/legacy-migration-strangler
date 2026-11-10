@@ -1,3 +1,4 @@
+import { ledgerMessageKeyOf } from '../domain/ledger-message-key.js';
 import { chargeResult, RECORDED_AT } from '../testing/charge-result.test-support.js';
 import { runExactlyOnceAudit, type ExactlyOnceDependencies } from './run-exactly-once-audit.js';
 
@@ -6,8 +7,8 @@ const dependencies = (overrides: Partial<ExactlyOnceDependencies> = {}): Exactly
   newOfficialReader: { read: async () => [chargeResult({ messageId: 'r_1' })] },
   ledgerReader: {
     read: async () => [
-      { messageId: 'r_0', service: 'legacy', routingMode: 'percentage', claimedAt: new Date(0) },
-      { messageId: 'r_1', service: 'new', routingMode: 'percentage', claimedAt: new Date(0) },
+      { messageKey: ledgerMessageKeyOf('r_0'), service: 'legacy', routingMode: 'percentage', claimedAt: new Date(0) },
+      { messageKey: ledgerMessageKeyOf('r_1'), service: 'new', routingMode: 'percentage', claimedAt: new Date(0) },
     ],
   },
   announcedRejectionsReader: { read: async () => [] },
