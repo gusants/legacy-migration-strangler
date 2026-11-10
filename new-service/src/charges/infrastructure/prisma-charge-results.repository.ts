@@ -13,6 +13,7 @@ type StoredChargeResult = {
   daysLate: number;
   fineCents: bigint;
   interestCents: bigint;
+  discountCents: bigint;
   totalCents: bigint;
 };
 
@@ -22,6 +23,7 @@ const toChargeResult = (stored: StoredChargeResult): ChargeResult => ({
   daysLate: stored.daysLate,
   fineCents: Number(stored.fineCents),
   interestCents: Number(stored.interestCents),
+  discountCents: Number(stored.discountCents),
   totalCents: Number(stored.totalCents),
 });
 
@@ -39,7 +41,8 @@ export class PrismaChargeResultsRepository extends ChargeResultsRepository {
   async findByMessageId(messageId: string): Promise<ChargeResult | null> {
     const [stored] = await this.prisma.$queryRaw<StoredChargeResult[]>`
       SELECT charge_id AS "chargeId", status, days_late AS "daysLate",
-             fine_cents AS "fineCents", interest_cents AS "interestCents", total_cents AS "totalCents"
+             fine_cents AS "fineCents", interest_cents AS "interestCents",
+             discount_cents AS "discountCents", total_cents AS "totalCents"
       FROM ${this.table}
       WHERE message_id = ${messageId}`;
     return stored ? toChargeResult(stored) : null;
@@ -48,10 +51,10 @@ export class PrismaChargeResultsRepository extends ChargeResultsRepository {
   async saveIfAbsent(message: ChargeMessage, result: ChargeResult): Promise<ChargeResult> {
     await this.prisma.$executeRaw`
       INSERT INTO ${this.table}
-        (message_id, charge_id, status, days_late, fine_cents, interest_cents, total_cents, payload)
+        (message_id, charge_id, status, days_late, fine_cents, interest_cents, discount_cents, total_cents, payload)
       VALUES
         (${message.messageId}, ${result.chargeId}, ${result.status}, ${result.daysLate},
-         ${result.fineCents}::bigint, ${result.interestCents}::bigint, ${result.totalCents}::bigint,
+         ${result.fineCents}::bigint, ${result.interestCents}::bigint, ${result.discountCents}::bigint, ${result.totalCents}::bigint,
          ${JSON.stringify(message)}::jsonb)
       ON CONFLICT (message_id) DO NOTHING`;
     const stored = await this.findByMessageId(message.messageId);

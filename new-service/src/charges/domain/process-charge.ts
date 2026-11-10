@@ -1,5 +1,6 @@
 import type { ChargeInput, ChargeOutcome } from './charge.types.js';
 import { daysLate } from './days-late.js';
+import { discount } from './discount.js';
 import { fine } from './fine.js';
 import { interest } from './interest.js';
 import { isWithinGracePeriod } from './is-within-grace-period.js';
@@ -19,11 +20,18 @@ function lateFees({ amountCents, planType }: ChargeInput, days: number): LateFee
 export function processCharge(input: ChargeInput): ChargeOutcome {
   const days = daysLate(input.dueDate, input.referenceDate);
   const { fineCents, interestCents } = lateFees(input, days);
+  const chargeStatus = status({ paid: input.paid, daysLate: days, failedAttempts: input.failedAttempts });
+  const discountCents = discount({
+    amountCents: input.amountCents,
+    paymentMethod: input.paymentMethod,
+    status: chargeStatus,
+  });
   return {
-    status: status({ paid: input.paid, daysLate: days, failedAttempts: input.failedAttempts }),
+    status: chargeStatus,
     daysLate: days,
     fineCents,
     interestCents,
-    totalCents: input.amountCents + fineCents + interestCents,
+    discountCents,
+    totalCents: input.amountCents + fineCents + interestCents - discountCents,
   };
 }

@@ -1,4 +1,4 @@
-import type { PlanType } from '../domain/charge.types.js';
+import type { PaymentMethod, PlanType } from '../domain/charge.types.js';
 
 export type ChargeMessage = {
   messageId: string;
@@ -9,4 +9,5 @@ export type ChargeMessage = {
   paid: boolean;
   planType: PlanType;
   failedAttempts: number;
+  paymentMethod?: PaymentMethod;
 };

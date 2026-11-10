@@ -41,4 +41,12 @@ describe('chargeMessageSchema', () => {
   it.each(['a\u0000b', 'a\ud800b'])('rejects identifiers Postgres cannot store: %j', (value) => {
     expect(accepts({ messageId: value })).toBe(false);
   });
+
+  it.each(['pix', 'boleto', 'card'])('accepts paymentMethod %s', (paymentMethod) => {
+    expect(accepts({ paymentMethod })).toBe(true);
+  });
+
+  it.each(['PIX', '', 'cash', 1, null, true, ['pix']])('rejects paymentMethod %j', (paymentMethod) => {
+    expect(accepts({ paymentMethod })).toBe(false);
+  });
 });

@@ -1,5 +1,7 @@
 export type PlanType = 'monthly' | 'yearly';
 
+export type PaymentMethod = 'pix' | 'boleto' | 'card';
+
 export type ChargeStatus = 'paid_on_time' | 'paid_late' | 'overdue' | 'uncollectible';
 
 export type ChargeInput = {
@@ -9,6 +11,7 @@ export type ChargeInput = {
   paid: boolean;
   planType: PlanType;
   failedAttempts: number;
+  paymentMethod?: PaymentMethod;
 };
 
 export type ChargeOutcome = {
@@ -16,5 +19,6 @@ export type ChargeOutcome = {
   daysLate: number;
   fineCents: number;
   interestCents: number;
+  discountCents: number;
   totalCents: number;
 };

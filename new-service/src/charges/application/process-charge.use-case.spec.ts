@@ -45,8 +45,22 @@ describe('ProcessChargeUseCase', () => {
       daysLate: 10,
       fineCents: 200,
       interestCents: 33,
+      discountCents: 0,
       totalCents: 10_233,
     });
+  });
+
+  it('stores and replays the Pix discount of a new message', async () => {
+    const useCase = new ProcessChargeUseCase(
+      new InMemoryChargeResultsRepository(),
+    );
+    const pixOnTime = message({ referenceDate: '2026-10-01', paymentMethod: 'pix' });
+
+    const first = await useCase.execute(pixOnTime);
+    const replay = await useCase.execute(pixOnTime);
+
+    expect(first).toMatchObject({ discountCents: 500, totalCents: 9_500 });
+    expect(replay).toEqual(first);
   });
 
   it('returns the original result when the message id repeats with another payload', async () => {
