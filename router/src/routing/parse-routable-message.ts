@@ -4,6 +4,7 @@ import type { RoutableMessage } from './routable-message.js';
 const routableMessageSchema = z.object({
   messageId: z.string().min(1),
   chargeId: z.string().min(1),
+  amountCents: z.number().optional().catch(undefined),
 });
 
 const parseJson = (body: string): unknown => {

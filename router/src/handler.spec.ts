@@ -212,6 +212,34 @@ describe('router handler', () => {
     expect(logs).toEqual([{ level: 'error', fields: { event: 'config_failed', error: 'bad routing.json', affectedRecords: 2 } }]);
   });
 
+  it('adds the decision reason to the routed log when the planner gives one', async () => {
+    const planner: RoutePlanner = {
+      plan: async () => ({
+        mode: 'percentage',
+        targets: [{ queue: 'legacy', role: 'primary' }],
+        reason: 'amount_above_new_service_limit',
+      }),
+    };
+    const { handler, logs } = buildHandler({ planner });
+
+    await handler(eventOf(record(1)));
+
+    expect(logs).toEqual([
+      {
+        level: 'info',
+        fields: {
+          event: 'routed',
+          messageId: 'm1',
+          chargeId: 'c1',
+          mode: 'percentage',
+          destination: 'legacy',
+          role: 'primary',
+          reason: 'amount_above_new_service_limit',
+        },
+      },
+    ]);
+  });
+
   it('fails every record visibly, without sending, in a mode that is not implemented', async () => {
     const { handler, sent, logs } = buildHandler({ config: { mode: 'new' } });
 

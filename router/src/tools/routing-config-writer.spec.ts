@@ -32,7 +32,16 @@ describe('writeRoutingConfigAtomically', () => {
     expect(JSON.parse(await readFile(path, 'utf8'))).toEqual({ mode: 'shadow' });
   });
 
+  it('accepts the percentage mode with its percentage', async () => {
+    await expect(
+      writeRoutingConfigAtomically(path, { mode: 'percentage', newTrafficPercent: 50 }),
+    ).resolves.toEqual({ mode: 'percentage', newTrafficPercent: 50 });
+
+    expect(JSON.parse(await readFile(path, 'utf8'))).toEqual({ mode: 'percentage', newTrafficPercent: 50 });
+  });
+
   it.each([
+    ['a percentage out of range', { mode: 'percentage', newTrafficPercent: 101 }],
     ['an unknown mode', { mode: 'canary' }],
     ['a declared but unimplemented mode', { mode: 'new' }],
     ['a missing mode', {}],

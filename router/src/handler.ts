@@ -25,6 +25,8 @@ type Dispatch = {
   outgoing: OutgoingMessage;
 };
 
+const identifiersOf = ({ messageId, chargeId }: RoutableMessage) => ({ messageId, chargeId });
+
 const errorText = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);
 
@@ -70,7 +72,7 @@ export const createHandler = ({ configResolver, planner, sender, queueUrls, logg
         outgoing: toOutgoing(index, record, message, decision, target),
       }));
     } catch (error) {
-      logger.error({ event: 'routing_failed', ...message, error: errorText(error) });
+      logger.error({ event: 'routing_failed', ...identifiersOf(message), error: errorText(error) });
       return undefined;
     }
   };
@@ -78,10 +80,11 @@ export const createHandler = ({ configResolver, planner, sender, queueUrls, logg
   const logRouted = ({ message, decision, target }: Dispatch): void =>
     logger.info({
       event: 'routed',
-      ...message,
+      ...identifiersOf(message),
       mode: decision.mode,
       destination: target.queue,
       role: target.role,
+      ...(decision.reason === undefined ? {} : { reason: decision.reason }),
     });
 
   const logRejection = ({ message, target }: Dispatch, failure: SendFailure): void =>
@@ -94,7 +97,7 @@ export const createHandler = ({ configResolver, planner, sender, queueUrls, logg
     });
 
   const logShadowFailure = ({ message, target }: Dispatch): void =>
-    logger.error({ event: 'shadow_send_failed', ...message, destination: target.queue });
+    logger.error({ event: 'shadow_send_failed', ...identifiersOf(message), destination: target.queue });
 
   const isShadow = ({ target }: Dispatch): boolean => target.role === 'shadow';
 

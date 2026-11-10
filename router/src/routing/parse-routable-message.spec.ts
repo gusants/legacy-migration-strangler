@@ -4,7 +4,15 @@ describe('parseRoutableMessage', () => {
   it('extracts the routing identifiers and ignores the rest of the payload', () => {
     const body = JSON.stringify({ messageId: 'm1', chargeId: 'c1', amountCents: 100 });
 
-    expect(parseRoutableMessage(body)).toEqual({ messageId: 'm1', chargeId: 'c1' });
+    expect(parseRoutableMessage(body)).toEqual({ messageId: 'm1', chargeId: 'c1', amountCents: 100 });
+  });
+
+  it('leaves the amount undefined when it is absent or not a number', () => {
+    expect(parseRoutableMessage('{"messageId":"m1","chargeId":"c1"}')?.amountCents).toBeUndefined();
+    expect(parseRoutableMessage('{"messageId":"m1","chargeId":"c1","amountCents":"10"}')).toEqual({
+      messageId: 'm1',
+      chargeId: 'c1',
+    });
   });
 
   it.each([
