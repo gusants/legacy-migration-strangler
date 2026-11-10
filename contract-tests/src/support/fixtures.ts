@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { ChargeMessage, PlanType } from './contract.js';
+import type { ChargeMessage, PaymentMethod, PlanType } from './contract.js';
 
 export const DUE_DATE = '2026-10-01';
 
@@ -13,6 +13,7 @@ export interface LateChargeOptions {
   failedAttempts?: number;
   messageId?: string;
   chargeId?: string;
+  paymentMethod?: PaymentMethod;
 }
 
 export function uniqueMessageId(): string {
@@ -34,5 +35,6 @@ export function lateCharge(options: LateChargeOptions = {}): ChargeMessage {
     paid: options.paid ?? true,
     planType: options.planType ?? 'monthly',
     failedAttempts: options.failedAttempts ?? 0,
+    ...(options.paymentMethod === undefined ? {} : { paymentMethod: options.paymentMethod }),
   };
 }
