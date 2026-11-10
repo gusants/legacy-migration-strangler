@@ -62,4 +62,42 @@ describe('runExactlyOnceAudit', () => {
 
     expect(logReads).toBe(0);
   });
+
+  describe('an expected message nobody claimed and nobody stored', () => {
+    const ledgerOf = (claimedAt: Date) => ({
+      read: async () => [{ messageKey: ledgerMessageKeyOf('r_0'), service: 'legacy' as const, routingMode: 'new', claimedAt }],
+    });
+    const oneStored = dependencies({ newOfficialReader: { read: async () => [] } });
+    const request = { runId: 'r', expectedCount: 2, settleSeconds: 30 };
+    const longAfter = new Date(RECORDED_AT.getTime() - 3_600_000);
+
+    it('is missing when the oldest claim of the run is older than the settle window', async () => {
+      const { report, verdict } = await runExactlyOnceAudit(
+        { ...oneStored, ledgerReader: ledgerOf(longAfter) },
+        request,
+      );
+
+      expect(report.missing).toEqual(['r_1']);
+      expect(verdict.status).toBe('FAILED');
+    });
+
+    it('stays pending while the oldest claim is inside the settle window', async () => {
+      const { report, verdict } = await runExactlyOnceAudit(
+        { ...oneStored, ledgerReader: ledgerOf(RECORDED_AT) },
+        request,
+      );
+
+      expect(report.pending).toEqual(['r_1']);
+      expect(verdict.status).toBe('INCONCLUSIVE');
+    });
+
+    it('uses the given run start when the ledger has no claim at all', async () => {
+      const { report } = await runExactlyOnceAudit(
+        { ...oneStored, ledgerReader: { read: async () => [] }, legacyOfficialReader: { read: async () => [] } },
+        { ...request, runStartedAt: longAfter },
+      );
+
+      expect(report.missing).toEqual(['r_0', 'r_1']);
+    });
+  });
 });

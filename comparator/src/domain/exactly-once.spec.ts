@@ -19,6 +19,7 @@ const input = (overrides: Partial<ExactlyOnceInput> = {}): ExactlyOnceInput => (
   announcedRejections: new Set(),
   now: NOW,
   settleSeconds: 30,
+  runStartedAt: undefined,
   ...overrides,
 });
 
@@ -67,10 +68,38 @@ describe('auditExactlyOnce', () => {
     expect(outcome.missing).toEqual([]);
   });
 
-  it('keeps a message the router never claimed pending', () => {
+  it('keeps a message the router never claimed pending while the run start is unknown', () => {
     const outcome = auditExactlyOnce(input({ officialIds: { legacy: ['r_0'], new: [] }, ledger: [ledgerEntry('r_0', 'legacy')] }));
 
     expect(outcome.pending).toEqual(['r_1']);
+  });
+
+  it('keeps an unclaimed message pending while the run is younger than the settle window', () => {
+    const outcome = auditExactlyOnce(
+      input({ officialIds: { legacy: ['r_0'], new: [] }, ledger: [ledgerEntry('r_0', 'legacy')], runStartedAt: JUST_NOW }),
+    );
+
+    expect(outcome.pending).toEqual(['r_1']);
+  });
+
+  it('declares an unclaimed message without an official row missing once the run is older than the settle window', () => {
+    const outcome = auditExactlyOnce(
+      input({ officialIds: { legacy: ['r_0'], new: [] }, ledger: [ledgerEntry('r_0', 'legacy')], runStartedAt: LONG_AGO }),
+    );
+
+    expect(outcome).toMatchObject({ missing: ['r_1'], pending: [] });
+  });
+
+  it('does not let an old run start hide a claim still inside its settle window', () => {
+    const outcome = auditExactlyOnce(
+      input({
+        officialIds: { legacy: ['r_0'], new: [] },
+        ledger: [ledgerEntry('r_0', 'legacy'), ledgerEntry('r_1', 'new', JUST_NOW)],
+        runStartedAt: LONG_AGO,
+      }),
+    );
+
+    expect(outcome).toMatchObject({ missing: [], pending: ['r_1'] });
   });
 
   it('treats the claim moment exactly at the settle boundary as settled', () => {

@@ -16,6 +16,7 @@ export type ExactlyOnceInput = {
   announcedRejections: ReadonlySet<string>;
   now: Date;
   settleSeconds: number;
+  runStartedAt: Date | undefined;
 };
 
 export type DuplicatedMessage = { messageId: string; legacyRows: number; newRows: number };
@@ -62,9 +63,13 @@ const isAnnouncedRejection = (
   announcedRejections: ReadonlySet<string>,
 ): boolean => ledgerEntry?.service === 'new' && announcedRejections.has(messageId);
 
-const isStillSettling = (ledgerEntry: LedgerEntry | undefined, { now, settleSeconds }: ExactlyOnceInput): boolean =>
-  ledgerEntry === undefined ||
-  now.getTime() - ledgerEntry.claimedAt.getTime() < settleSeconds * MILLISECONDS_PER_SECOND;
+const isOlderThanSettleWindow = (since: Date, { now, settleSeconds }: ExactlyOnceInput): boolean =>
+  now.getTime() - since.getTime() >= settleSeconds * MILLISECONDS_PER_SECOND;
+
+const isStillSettling = (ledgerEntry: LedgerEntry | undefined, input: ExactlyOnceInput): boolean => {
+  const since = ledgerEntry?.claimedAt ?? input.runStartedAt;
+  return since === undefined || !isOlderThanSettleWindow(since, input);
+};
 
 const classifyAbsent = (messageId: string, ledgerEntry: LedgerEntry | undefined, input: ExactlyOnceInput): Classification => {
   if (isAnnouncedRejection(messageId, ledgerEntry, input.announcedRejections)) return { kind: 'exception', messageId };

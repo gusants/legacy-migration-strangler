@@ -96,8 +96,19 @@ describe('parseExactlyOnceOptions', () => {
     expect(parseExactlyOnceOptions(['--run-id', 'a', '--expected-count', '1', '--settle-seconds', '0']).settleSeconds).toBe(0);
   });
 
+  it('reads an optional run start', () => {
+    const options = parseExactlyOnceOptions(['--run-id', 'a', '--expected-count', '1', '--run-started-at', '2026-11-10T12:00:00Z']);
+
+    expect(options.runStartedAt).toEqual(new Date('2026-11-10T12:00:00Z'));
+  });
+
+  it('leaves the run start out when it is not given', () => {
+    expect(parseExactlyOnceOptions(['--run-id', 'a', '--expected-count', '1'])).not.toHaveProperty('runStartedAt');
+  });
+
   it.each([
     [['--expected-count', '3'], '--run-id is required'],
+    [['--run-id', 'a', '--expected-count', '1', '--run-started-at', 'yesterday'], 'ISO 8601'],
     [['--run-id', 'a'], '--expected-count is required'],
     [['--run-id', 'a', '--expected-count', '0'], 'at least 1'],
     [['--run-id', 'a', '--expected-count', '1.5'], 'non-negative integer'],

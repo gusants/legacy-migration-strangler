@@ -78,7 +78,7 @@ Use `--since <ISO date>` instead of `--run-id` to compare a time window, and `--
 - a message sits in a service other than the one the ledger recorded for it, or has no ledger record;
 - an official message of the run is outside the expected set.
 
-The one known exception is C1 (amount above 1e12 in `new` mode, dead-lettered by design): a message with no official result is accepted only when the ledger says `new` and the router logged it with the reason `amount_above_new_service_limit_will_dead_letter`. A missing message that was claimed by the router less than `--settle-seconds` ago (or not claimed yet) is pending, which makes the verdict INCONCLUSIVE (exit 2). Reports go to `reports/audit-<run id>.md` and `.json`.
+The one known exception is C1 (amount above 1e12 in `new` mode, dead-lettered by design): a message with no official result is accepted only when the ledger says `new` and the router logged it with the reason `amount_above_new_service_limit_will_dead_letter`. A missing message claimed by the router less than `--settle-seconds` ago is pending, which makes the verdict INCONCLUSIVE (exit 2); a message with no claim is pending only while the run itself (its oldest ledger claim, or `--run-started-at <ISO timestamp>`) is younger than `--settle-seconds`, after that it is missing (FAILED). Reports go to `reports/audit-<run id>.md` and `.json`.
 
 ### Rollout with gates
 

@@ -1,4 +1,4 @@
-import { auditExactlyOnce } from '../domain/exactly-once.js';
+import { auditExactlyOnce, type LedgerEntry } from '../domain/exactly-once.js';
 import { buildExactlyOnceReport, judgeExactlyOnceReport, type ExactlyOnceReport } from '../report/exactly-once-report.js';
 import type { Verdict } from '../report/verdict.js';
 import type { AnnouncedRejectionsReader, ResultsReader, RoutingLedgerReader } from './ports.js';
@@ -11,18 +11,26 @@ export type ExactlyOnceDependencies = {
   now: () => Date;
 };
 
-export type ExactlyOnceRequest = { runId: string; expectedCount: number; settleSeconds: number };
+export type ExactlyOnceRequest = {
+  runId: string;
+  expectedCount: number;
+  settleSeconds: number;
+  runStartedAt?: Date;
+};
 
 export type ExactlyOnceResult = { report: ExactlyOnceReport; verdict: Verdict };
 
 const expectedMessageIds = (runId: string, expectedCount: number): string[] =>
   Array.from({ length: expectedCount }, (_, index) => `${runId}_${index}`);
 
+const oldestClaimOf = (ledger: readonly LedgerEntry[]): Date | undefined =>
+  ledger.length === 0 ? undefined : new Date(Math.min(...ledger.map(({ claimedAt }) => claimedAt.getTime())));
+
 const messageIdsOf = (rows: readonly { messageId: string }[]): string[] => rows.map(({ messageId }) => messageId);
 
 export const runExactlyOnceAudit = async (
   { legacyOfficialReader, newOfficialReader, ledgerReader, announcedRejectionsReader, now }: ExactlyOnceDependencies,
-  { runId, expectedCount, settleSeconds }: ExactlyOnceRequest,
+  { runId, expectedCount, settleSeconds, runStartedAt }: ExactlyOnceRequest,
 ): Promise<ExactlyOnceResult> => {
   const scope = { runId };
   const [legacyRows, newRows, ledger] = await Promise.all([
@@ -39,6 +47,7 @@ export const runExactlyOnceAudit = async (
       announcedRejections,
       now: auditedAt,
       settleSeconds,
+      runStartedAt: runStartedAt ?? oldestClaimOf(ledger),
     });
   const withoutExceptions = auditWith(new Set());
   const outcome =

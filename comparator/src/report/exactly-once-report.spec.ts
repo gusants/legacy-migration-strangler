@@ -114,6 +114,7 @@ describe('renderExactlyOnceMarkdown', () => {
       ledger: [],
       announcedRejections: new Set(),
       now: RECORDED_AT,
+      runStartedAt: undefined,
       settleSeconds: 0,
     });
 
