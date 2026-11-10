@@ -42,6 +42,42 @@ describe('decideRoute', () => {
     });
   });
 
+  describe.each([
+    ['NUL', 'a\u0000b'],
+    ['lone surrogate', 'a\uD800'],
+  ])('an identifier with %s', (_label, badId) => {
+    it.each([
+      ['messageId', { messageId: badId, chargeId: 'ch-1' }],
+      ['chargeId', { messageId: 'msg-1', chargeId: badId }],
+    ])('in %s goes to the new queue in new mode and says it will dead-letter', (_field, bad) => {
+      expect(decideRoute(bad, { mode: 'new' })).toEqual({
+        mode: 'new',
+        targets: [{ queue: 'new', role: 'primary' }],
+        reason: 'identifier_not_storable_by_new_service_will_dead_letter',
+      });
+    });
+
+    it.each([
+      ['messageId', { messageId: badId, chargeId: 'ch-1' }],
+      ['chargeId', { messageId: 'msg-1', chargeId: badId }],
+    ])('in %s stays on legacy in percentage mode even at 100%, without a shadow copy', (_field, bad) => {
+      expect(decideRoute(bad, { mode: 'percentage', newTrafficPercent: 100 })).toEqual({
+        mode: 'percentage',
+        targets: [{ queue: 'legacy', role: 'primary' }],
+        reason: 'identifier_not_storable_by_new_service',
+      });
+    });
+  });
+
+  it('prefers the amount reason when a charge breaks both limits', () => {
+    const decision = decideRoute(
+      { messageId: 'a\u0000', chargeId: 'ch', amountCents: 2e12 },
+      { mode: 'percentage', newTrafficPercent: 100 },
+    );
+
+    expect(decision.reason).toBe('amount_above_new_service_limit');
+  });
+
   describe('percentage mode', () => {
     const chargeIdInBucket = (bucket: number): string => {
       for (let attempt = 0; ; attempt += 1) {

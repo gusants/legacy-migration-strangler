@@ -29,7 +29,7 @@ pnpm routing:set legacy
 
 `pnpm routing:set percentage <0-100>` sends that share of charges to the new service as the official result; the rest stays on legacy and also gets a shadow copy in the new service. The share is decided by FNV-1a of the `chargeId` (bucket 0-99, bucket below the percentage goes to the new service), so a charge keeps its bucket and raising the percentage only moves charges from legacy to new. `pnpm routing:set new` sends everything to the new service.
 
-Every routed message is first recorded in `router.routing_ledger` (Postgres, conditional insert; it lives in its own `router-db` service, so an outage of the new service database never stops the router): a message redelivered after a mode change goes to the service recorded the first time, so it never gets an official result in both. Charges above 1e12 cents stay on legacy in `percentage` mode (see [known divergences](docs/known-divergences.md), C1).
+Every routed message is first recorded in `router.routing_ledger` (Postgres, conditional insert; it lives in its own `router-db` service, so an outage of the new service database never stops the router): a message redelivered after a mode change goes to the service recorded the first time, so it never gets an official result in both. Charges above 1e12 cents and messages with `\u0000` or lone surrogates in an identifier stay on legacy in `percentage` mode (see [known divergences](docs/known-divergences.md), C1 and C2).
 
 `pnpm verify:flow --count 500` reports the real split (for example `legacy 447 / new 53`) and checks each message in the table of the service it was routed to, the shadow table, and the three dead-letter queues.
 
