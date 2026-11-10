@@ -79,3 +79,15 @@ Use `--since <ISO date>` instead of `--run-id` to compare a time window, and `--
 - an official message of the run is outside the expected set.
 
 The one known exception is C1 (amount above 1e12 in `new` mode, dead-lettered by design): a message with no official result is accepted only when the ledger says `new` and the router logged it with the reason `amount_above_new_service_limit_will_dead_letter`. A missing message that was claimed by the router less than `--settle-seconds` ago (or not claimed yet) is pending, which makes the verdict INCONCLUSIVE (exit 2). Reports go to `reports/audit-<run id>.md` and `.json`.
+
+### Rollout with gates
+
+`pnpm rollout <stage>` moves the router to one stage and only keeps it when the evidence is green. The stage is `shadow`, an integer from 1 to 100 (`percentage`) or `new`; the usual path is `shadow`, `10`, `50`, `100`, `new`. Each stage:
+
+1. records the current `router/config/routing.json` and applies the stage with `routing:set`;
+2. produces `ROLLOUT_COUNT` messages (default 300) with `verify:flow`, which proves one routed primary copy per message;
+3. waits for `charges-new` and `charges-legacy` to drain;
+4. runs `exactly-once` and, when the stage has a legacy slice with a shadow copy (`shadow` and 1 to 99), `compare`;
+5. treats exit 2 (INCONCLUSIVE) as "wait and repeat", up to `ROLLOUT_GATE_RETRIES` attempts (default 5) spaced `ROLLOUT_GATE_INTERVAL_SECONDS` (default 15) apart. It is never green.
+
+Any failed gate, or a gate still inconclusive after the attempts, restores the previous config automatically and exits non-zero. `pnpm rollout --rollback` restores the config recorded before the last stage. The report of each stage is `reports/rollout-<timestamp>-<stage>.md`: config before and after, run id, the real legacy/new split, both verdicts and links to the detailed reports. Because the ledger pins every message to its first destination, moving the percentage back and forth never sends a message to a second service.

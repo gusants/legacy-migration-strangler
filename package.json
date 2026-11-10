@@ -17,6 +17,7 @@
     "routing:set": "pnpm --filter router routing:set",
     "compare": "pnpm --filter comparator compare",
     "exactly-once": "pnpm --filter comparator exactly-once",
+    "rollout": "./scripts/rollout.sh",
     "redrive": "pnpm --filter router redrive"
   }
 }

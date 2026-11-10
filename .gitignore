@@ -21,3 +21,5 @@ reports/contract-*.json
 new-service/src/generated
 reports/shadow-*
 reports/audit-*
+reports/rollout-*
+reports/.rollout-*
