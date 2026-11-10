@@ -43,7 +43,7 @@ describe('writeRoutingConfigAtomically', () => {
   it.each([
     ['a percentage out of range', { mode: 'percentage', newTrafficPercent: 101 }],
     ['an unknown mode', { mode: 'canary' }],
-    ['a declared but unimplemented mode', { mode: 'new' }],
+    ['a percentage on the new mode', { mode: 'new', newTrafficPercent: 10 }],
     ['a missing mode', {}],
   ])('refuses %s and keeps the current file untouched', async (_name, candidate) => {
     await expect(writeRoutingConfigAtomically(path, candidate)).rejects.toThrow();

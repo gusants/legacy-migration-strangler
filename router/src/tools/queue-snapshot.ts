@@ -15,10 +15,11 @@ const countMessages = async (client: SQSClient, queueUrl: string): Promise<numbe
 };
 
 export const takeQueueSnapshot = async (client: SQSClient, env: RunnerEnv): Promise<QueueSnapshot> => {
-  const [incomingDlq, legacyDlq, incomingPending] = await Promise.all([
+  const [incomingDlq, legacyDlq, newDlq, incomingPending] = await Promise.all([
     countMessages(client, `${env.incomingQueueUrl}${DEAD_LETTER_SUFFIX}`),
     countMessages(client, `${env.queueUrls.legacy}${DEAD_LETTER_SUFFIX}`),
+    countMessages(client, `${env.queueUrls.new}${DEAD_LETTER_SUFFIX}`),
     countMessages(client, env.incomingQueueUrl),
   ]);
-  return { incomingDlq, legacyDlq, incomingPending };
+  return { incomingDlq, legacyDlq, newDlq, incomingPending };
 };

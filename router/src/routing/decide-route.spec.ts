@@ -1,7 +1,6 @@
 import fc from 'fast-check';
 import { decideRoute } from './decide-route.js';
 import type { RoutingConfig } from './routing-config.js';
-import { UnsupportedRoutingModeError } from './routing-errors.js';
 import { trafficBucketOf } from './traffic-bucket.js';
 
 const FIXED_SEED = 20_261_110;
@@ -26,11 +25,21 @@ describe('decideRoute', () => {
     });
   });
 
-  it('fails explicitly in new mode instead of falling back to legacy', () => {
-    const config: RoutingConfig = { mode: 'new' };
+  describe('new mode', () => {
+    it('sends everything to the new queue as the primary, with no shadow', () => {
+      expect(decideRoute(message, { mode: 'new' })).toEqual({
+        mode: 'new',
+        targets: [{ queue: 'new', role: 'primary' }],
+      });
+    });
 
-    expect(() => decideRoute(message, config)).toThrow(UnsupportedRoutingModeError);
-    expect(() => decideRoute(message, config)).toThrow('"new" is not implemented');
+    it('still sends a charge above the new service limit there and says it will dead-letter', () => {
+      expect(decideRoute({ ...message, amountCents: 1e12 + 1 }, { mode: 'new' })).toEqual({
+        mode: 'new',
+        targets: [{ queue: 'new', role: 'primary' }],
+        reason: 'amount_above_new_service_limit_will_dead_letter',
+      });
+    });
   });
 
   describe('percentage mode', () => {
@@ -48,12 +57,18 @@ describe('decideRoute', () => {
       expect(queueOf(chargeIdInBucket(9), 10)).toEqual([{ queue: 'new', role: 'primary' }]);
     });
 
-    it('sends a charge whose bucket is at or above the percentage to the legacy queue only', () => {
-      expect(queueOf(chargeIdInBucket(10), 10)).toEqual([{ queue: 'legacy', role: 'primary' }]);
+    it('sends a charge whose bucket is at or above the percentage to legacy with a shadow copy on new', () => {
+      expect(queueOf(chargeIdInBucket(10), 10)).toEqual([
+        { queue: 'legacy', role: 'primary' },
+        { queue: 'new', role: 'shadow' },
+      ]);
     });
 
-    it('sends everything to legacy at 0% and everything to new at 100%', () => {
-      expect(queueOf(chargeIdInBucket(0), 0)).toEqual([{ queue: 'legacy', role: 'primary' }]);
+    it('sends everything to legacy (shadowed) at 0% and everything to new at 100%', () => {
+      expect(queueOf(chargeIdInBucket(0), 0)).toEqual([
+        { queue: 'legacy', role: 'primary' },
+        { queue: 'new', role: 'shadow' },
+      ]);
       expect(queueOf(chargeIdInBucket(99), 100)).toEqual([{ queue: 'new', role: 'primary' }]);
     });
 

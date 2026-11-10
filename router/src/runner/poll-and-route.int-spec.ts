@@ -133,8 +133,8 @@ describe('router flow against ElasticMQ', () => {
   });
 
   it('keeps the message in incoming and fails the batch when no valid config was ever read', async () => {
-    await writeFile(routingPath, '{"mode":"new"}');
-    await queues.send('charges-incoming', chargeBody('flow-unsupported'));
+    await writeFile(routingPath, '{"mode":"canary"}');
+    await queues.send('charges-incoming', chargeBody('flow-invalid-config'));
 
     await pollAndRouteOnce(deps, new AbortController().signal);
 

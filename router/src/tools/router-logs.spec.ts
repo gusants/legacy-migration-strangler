@@ -1,38 +1,44 @@
-import { parsePrimaryRoutedMessageIds, parseShadowRoutedMessageIds } from './router-logs.js';
+import { parseRoutedCopies } from './router-logs.js';
 
-const routed = (messageId: string, role = 'primary') =>
-  JSON.stringify({ level: 'info', event: 'routed', messageId, chargeId: 'c', mode: 'legacy', destination: 'legacy', role });
+const routed = (messageId: string, role = 'primary', destination = 'legacy') =>
+  JSON.stringify({ level: 'info', event: 'routed', messageId, chargeId: 'c', mode: 'percentage', destination, role });
 
-describe('parsePrimaryRoutedMessageIds', () => {
-  it('collects one id per primary routed event of the run, repeats included', () => {
-    const logs = [routed('run1_0'), routed('run1_1'), routed('run1_0'), ''].join('\n');
+describe('parseRoutedCopies', () => {
+  it('collects every routed copy of the run with its role and destination, repeats included', () => {
+    const logs = [
+      routed('run1_0'),
+      routed('run1_1', 'primary', 'new'),
+      routed('run1_0', 'shadow', 'new'),
+      routed('run1_0'),
+      '',
+    ].join('\n');
 
-    expect(parsePrimaryRoutedMessageIds(logs, 'run1_')).toEqual(['run1_0', 'run1_1', 'run1_0']);
+    expect(parseRoutedCopies(logs, 'run1_')).toEqual([
+      { messageId: 'run1_0', role: 'primary', destination: 'legacy' },
+      { messageId: 'run1_1', role: 'primary', destination: 'new' },
+      { messageId: 'run1_0', role: 'shadow', destination: 'new' },
+      { messageId: 'run1_0', role: 'primary', destination: 'legacy' },
+    ]);
   });
 
-  it('ignores other runs, shadow copies, other events and non-JSON lines', () => {
+  it('ignores other runs, other events, unknown roles or destinations and non-JSON lines', () => {
     const logs = [
       routed('other_0'),
-      routed('run1_2', 'shadow'),
-      JSON.stringify({ event: 'batch_done', messageId: 'run1_3' }),
-      JSON.stringify({ event: 'routed', messageId: 7 }),
+      routed('run1_2', 'observer'),
+      routed('run1_2', 'primary', 'mainframe'),
+      JSON.stringify({ event: 'batch_done', messageId: 'run1_3', role: 'primary', destination: 'legacy' }),
+      JSON.stringify({ event: 'routed', messageId: 7, role: 'primary', destination: 'legacy' }),
       'not json {',
       'plain text',
       '{"event":"routed"',
     ].join('\n');
 
-    expect(parsePrimaryRoutedMessageIds(logs, 'run1_')).toEqual([]);
+    expect(parseRoutedCopies(logs, 'run1_')).toEqual([]);
   });
 
   it('tolerates a compose log prefix before the JSON', () => {
-    expect(parsePrimaryRoutedMessageIds(`router-1  | ${routed('run1_0')}`, 'run1_')).toEqual(['run1_0']);
-  });
-});
-
-describe('parseShadowRoutedMessageIds', () => {
-  it('collects only the shadow routed events of the run', () => {
-    const logs = [routed('run1_0', 'shadow'), routed('run1_0'), routed('other_1', 'shadow'), routed('run1_2', 'shadow')].join('\n');
-
-    expect(parseShadowRoutedMessageIds(logs, 'run1_')).toEqual(['run1_0', 'run1_2']);
+    expect(parseRoutedCopies(`router-1  | ${routed('run1_0')}`, 'run1_')).toEqual([
+      { messageId: 'run1_0', role: 'primary', destination: 'legacy' },
+    ]);
   });
 });

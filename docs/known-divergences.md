@@ -14,7 +14,7 @@ The contract suite (`contract-tests/`) passes against both services. The cases b
 
 | # | Case | Legacy | New |
 |---|---|---|---|
-| C1 | `amountCents` above 1e12 (R$ 10 billion) | Accepted | `400 invalid_payload`, keeps every computed value inside JavaScript's safe integer range |
+| C1 | `amountCents` above 1e12 (R$ 10 billion) | Accepted | `400 invalid_payload`, keeps every computed value inside JavaScript's safe integer range. Routing: in `percentage` mode the router always sends these charges to legacy (decision reason `amount_above_new_service_limit`, no shadow copy), so they keep an official result; in `new` mode they go to the new service and end in `charges-new-dlq` (a documented business limit, decision reason `amount_above_new_service_limit_will_dead_letter`) |
 | C2 | Identifiers containing `\u0000` or lone UTF-16 surrogates | Accepted | `400 invalid_payload` (Postgres `text`/`jsonb` cannot store them) |
 | C3 | Integers written as `10000.0` or `1e4` | `400` (decoded as float) | Accepted (JSON numbers carry no integer/float distinction in JavaScript) |
 | C4 | Request bodies above 1 MB | Up to PHP's `post_max_size` (8 MB) | `413` |

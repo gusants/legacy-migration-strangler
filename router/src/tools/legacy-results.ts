@@ -1,8 +1,5 @@
-import { existsSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
 import { createConnection, type Connection, type RowDataPacket } from 'mysql2/promise';
-
-const ENV_FILE = fileURLToPath(new URL('../../../.env', import.meta.url));
+import { loadRepositoryEnv, settingOrDefault } from './repository-env.js';
 
 const databaseDefaults: Record<string, string> = {
   LEGACY_DB_HOST: '127.0.0.1',
@@ -12,10 +9,10 @@ const databaseDefaults: Record<string, string> = {
   LEGACY_DB_NAME: 'legacy',
 };
 
-const setting = (name: string): string => process.env[name] ?? databaseDefaults[name] ?? '';
+const setting = (name: string): string => settingOrDefault(name, databaseDefaults);
 
 export const connectLegacyDatabase = async (): Promise<Connection> => {
-  if (existsSync(ENV_FILE)) process.loadEnvFile(ENV_FILE);
+  loadRepositoryEnv();
   const host = setting('LEGACY_DB_HOST');
   const port = Number(setting('LEGACY_DB_PORT'));
   const user = setting('LEGACY_DB_USER');

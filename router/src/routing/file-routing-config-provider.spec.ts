@@ -44,6 +44,12 @@ describe('FileRoutingConfigProvider', () => {
     await expect(provider.load()).rejects.toThrow('is not valid JSON');
   });
 
+  it('loads the new mode', async () => {
+    await writeFile(path, '{"mode":"new"}');
+
+    await expect(provider.load()).resolves.toEqual({ mode: 'new' });
+  });
+
   it('loads the percentage mode with its integer percentage', async () => {
     await writeFile(path, '{"mode":"percentage","newTrafficPercent":10}');
 
@@ -58,7 +64,7 @@ describe('FileRoutingConfigProvider', () => {
     ['a negative percentage', '{"mode":"percentage","newTrafficPercent":-1}'],
     ['a fractional percentage', '{"mode":"percentage","newTrafficPercent":10.5}'],
     ['a string percentage', '{"mode":"percentage","newTrafficPercent":"10"}'],
-    ['a mode that is declared but not implemented (new)', '{"mode":"new"}'],
+    ['unexpected key in new mode', '{"mode":"new","newTrafficPercent":10}'],
     ['unexpected key', '{"mode":"legacy","newTrafficPercent":10}'],
     ['unexpected key in shadow mode', '{"mode":"shadow","newTrafficPercent":10}'],
   ])('fails on %s', async (_name, content) => {

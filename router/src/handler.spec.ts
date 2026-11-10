@@ -240,8 +240,13 @@ describe('router handler', () => {
     ]);
   });
 
-  it('fails every record visibly, without sending, in a mode that is not implemented', async () => {
-    const { handler, sent, logs } = buildHandler({ config: { mode: 'new' } });
+  it('fails every record visibly, without sending, when the planner throws', async () => {
+    const planner: RoutePlanner = {
+      plan: async () => {
+        throw new Error('ledger unavailable');
+      },
+    };
+    const { handler, sent, logs } = buildHandler({ planner });
 
     const response = await handler(eventOf(record(1), record(2)));
 
@@ -250,8 +255,18 @@ describe('router handler', () => {
     expect(logs).toHaveLength(2);
     expect(logs[0]).toEqual({
       level: 'error',
-      fields: { event: 'routing_failed', messageId: 'm1', chargeId: 'c1', error: 'routing mode "new" is not implemented' },
+      fields: { event: 'routing_failed', messageId: 'm1', chargeId: 'c1', error: 'ledger unavailable' },
     });
+  });
+
+  it('sends the primary to the new queue only in new mode', async () => {
+    const { handler, sent } = buildHandler({ config: { mode: 'new' } });
+
+    const response = await handler(eventOf(record(1)));
+
+    expect(response.batchItemFailures).toEqual([]);
+    expect(sent.map(({ queueUrl }) => queueUrl)).toEqual([QUEUE_URLS.new]);
+    expect(sent[0]?.messages[0]?.attributes).toMatchObject({ routingMode: 'new', routingRole: 'primary' });
   });
 
   describe('with a shadow copy', () => {

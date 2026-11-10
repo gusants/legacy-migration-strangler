@@ -1,43 +1,45 @@
 import { execFile } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
+import type { RoutedCopy } from './flow-verdict.js';
 
 const run = promisify(execFile);
 
 const REPOSITORY_ROOT = fileURLToPath(new URL('../../..', import.meta.url));
 const MAX_LOG_BYTES = 256 * 1024 * 1024;
 
-type RoutedEvent = { event?: unknown; role?: unknown; messageId?: unknown };
+type LogEntry = { event?: unknown; role?: unknown; destination?: unknown; messageId?: unknown };
 
-const parseJsonLine = (line: string): RoutedEvent | undefined => {
+const parseJsonLine = (line: string): LogEntry | undefined => {
   const start = line.indexOf('{');
   if (start < 0) return undefined;
   try {
-    return JSON.parse(line.slice(start)) as RoutedEvent;
+    return JSON.parse(line.slice(start)) as LogEntry;
   } catch {
     return undefined;
   }
 };
 
-const isRoutedAs = (entry: RoutedEvent | undefined, role: string): entry is RoutedEvent =>
-  entry?.event === 'routed' && entry.role === role;
+const isRole = (value: unknown): value is RoutedCopy['role'] => value === 'primary' || value === 'shadow';
 
-const routedMessageId = (entry: RoutedEvent | undefined, role: string, prefix: string): string[] => {
-  const messageId = isRoutedAs(entry, role) ? entry.messageId : undefined;
-  return typeof messageId === 'string' && messageId.startsWith(prefix) ? [messageId] : [];
+const isService = (value: unknown): value is RoutedCopy['destination'] => value === 'legacy' || value === 'new';
+
+const belongsToRun = (messageId: unknown, prefix: string): messageId is string =>
+  typeof messageId === 'string' && messageId.startsWith(prefix);
+
+const asRoutedCopy = ({ messageId, role, destination }: LogEntry, prefix: string): RoutedCopy[] => {
+  if (!belongsToRun(messageId, prefix) || !isRole(role)) return [];
+  return isService(destination) ? [{ messageId, role, destination }] : [];
 };
 
-const parseRoutedMessageIds = (logText: string, role: string, messageIdPrefix: string): string[] =>
+const toRoutedCopy = (entry: LogEntry | undefined, messageIdPrefix: string): RoutedCopy[] =>
+  entry?.event === 'routed' ? asRoutedCopy(entry, messageIdPrefix) : [];
+
+export const parseRoutedCopies = (logText: string, messageIdPrefix: string): RoutedCopy[] =>
   logText
     .split('\n')
     .map(parseJsonLine)
-    .flatMap((entry) => routedMessageId(entry, role, messageIdPrefix));
-
-export const parsePrimaryRoutedMessageIds = (logText: string, messageIdPrefix: string): string[] =>
-  parseRoutedMessageIds(logText, 'primary', messageIdPrefix);
-
-export const parseShadowRoutedMessageIds = (logText: string, messageIdPrefix: string): string[] =>
-  parseRoutedMessageIds(logText, 'shadow', messageIdPrefix);
+    .flatMap((entry) => toRoutedCopy(entry, messageIdPrefix));
 
 export const readRouterLogs = async (since: Date): Promise<string> => {
   try {

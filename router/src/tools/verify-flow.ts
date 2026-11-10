@@ -1,6 +1,7 @@
 import { setTimeout as sleep } from 'node:timers/promises';
 import type { SQSClient } from '@aws-sdk/client-sqs';
 import type { Connection } from 'mysql2/promise';
+import type { Client } from 'pg';
 import { createSqsClient } from '../config/create-sqs-client.js';
 import type { RunnerEnv } from '../config/env.js';
 import { generateCharges } from './charge-generator.js';
@@ -9,7 +10,8 @@ import { describeVerdict, isFlowIntact, judgeFlow, type QueueSnapshot } from './
 import { connectLegacyDatabase, storedMessageIds } from './legacy-results.js';
 import { loadLocalToolsEnv } from './local-environment.js';
 import { takeQueueSnapshot } from './queue-snapshot.js';
-import { parsePrimaryRoutedMessageIds, parseShadowRoutedMessageIds, readRouterLogs } from './router-logs.js';
+import { connectNewDatabase, storedNewMessageIds } from './new-results.js';
+import { parseRoutedCopies, readRouterLogs } from './router-logs.js';
 import { parseVerifyOptions, type VerifyOptions } from './verify-options.js';
 
 const POLL_INTERVAL_MS = 1000;
@@ -23,14 +25,16 @@ type Run = {
   env: RunnerEnv;
   client: SQSClient;
   connection: Connection;
+  newDatabase: Client;
   before: QueueSnapshot;
 };
 
-const isComplete = async ({ options, runId, client, env, connection, before }: Run): Promise<boolean> => {
-  const stored = await storedMessageIds(connection, runId);
+const isComplete = async ({ options, runId, client, env, connection, newDatabase, before }: Run): Promise<boolean> => {
+  const legacyStored = await storedMessageIds(connection, runId);
+  const newStored = await storedNewMessageIds(newDatabase, 'charge_results', runId);
   const now = await takeQueueSnapshot(client, env);
   return (
-    stored.length >= options.count &&
+    legacyStored.length + newStored.length >= options.count &&
     now.incomingDlq - before.incomingDlq >= options.invalid &&
     now.incomingPending === 0
   );
@@ -47,10 +51,11 @@ const verify = async (options: VerifyOptions): Promise<boolean> => {
   const env = loadLocalToolsEnv();
   const client = createSqsClient(env);
   const connection = await connectLegacyDatabase();
+  const newDatabase = await connectNewDatabase();
   const runId = newRunId();
   const startedAt = new Date();
   const before = await takeQueueSnapshot(client, env);
-  const run: Run = { options, runId, env, client, connection, before };
+  const run: Run = { options, runId, env, client, connection, newDatabase, before };
 
   try {
     await produceToLocalQueue(env, { ...options, runId, ratePerSecond: 0 });
@@ -60,9 +65,10 @@ const verify = async (options: VerifyOptions): Promise<boolean> => {
     const routerLogs = await readRouterLogs(new Date(startedAt.getTime() - LOG_CLOCK_MARGIN_MS));
     const verdict = judgeFlow({
       expectedIds: generateCharges(options.count, options.seed, runId).map(({ messageId }) => messageId),
-      storedIds: await storedMessageIds(connection, runId),
-      routedIds: parsePrimaryRoutedMessageIds(routerLogs, `${runId}_`),
-      shadowRoutedIds: parseShadowRoutedMessageIds(routerLogs, `${runId}_`),
+      legacyStoredIds: await storedMessageIds(connection, runId),
+      newStoredIds: await storedNewMessageIds(newDatabase, 'charge_results', runId),
+      shadowStoredIds: await storedNewMessageIds(newDatabase, 'charge_results_shadow', runId),
+      routedCopies: parseRoutedCopies(routerLogs, `${runId}_`),
       invalidInjected: options.invalid,
       before,
       after: await takeQueueSnapshot(client, env),
@@ -71,6 +77,7 @@ const verify = async (options: VerifyOptions): Promise<boolean> => {
     return isFlowIntact(verdict);
   } finally {
     await connection.end();
+    await newDatabase.end();
     client.destroy();
   }
 };

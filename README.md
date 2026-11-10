@@ -24,6 +24,14 @@ pnpm compare --run-id <run id>        # exit 0 PASSED, 1 FAILED, 2 INCONCLUSIVE 
 pnpm routing:set legacy
 ```
 
+## Gradual migration
+
+`pnpm routing:set percentage <0-100>` sends that share of charges to the new service as the official result; the rest stays on legacy and also gets a shadow copy in the new service. The share is decided by FNV-1a of the `chargeId` (bucket 0-99, bucket below the percentage goes to the new service), so a charge keeps its bucket and raising the percentage only moves charges from legacy to new. `pnpm routing:set new` sends everything to the new service.
+
+Every routed message is first recorded in `router.routing_ledger` (Postgres, conditional insert): a message redelivered after a mode change goes to the service recorded the first time, so it never gets an official result in both. Charges above 1e12 cents stay on legacy in `percentage` mode (see [known divergences](docs/known-divergences.md), C1).
+
+`pnpm verify:flow --count 500` reports the real split (for example `legacy 447 / new 53`) and checks each message in the table of the service it was routed to, the shadow table, and the three dead-letter queues.
+
 Every copy the router sends carries a `routingRole` message attribute (`primary` or `shadow`). The new service decides the destination table only by it (`primary` to `charge_results`, `shadow` to `charge_results_shadow`); a message with a missing or unknown role is treated as invalid, kept in the queue and moved to `charges-new-dlq` after 5 receives.
 
 When every message of a batch fails with a transient error (for example the database is down), the new service's consumer backs off from 1s doubling up to 30s and polls one message at a time until one succeeds, so an outage does not burn the receive count of the whole queue. After fixing the cause, move dead-lettered messages back with:
