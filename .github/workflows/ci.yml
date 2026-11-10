@@ -287,3 +287,97 @@ jobs:
       - name: Stop services
         if: always()
         run: docker compose down -v
+
+  rollout:
+    name: rollout (shadow, 10, 50, 100, new)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # Every job runs on its own runner VM, so this job and shadow-run never share
+    # CPU, memory, ports or compose projects; only the ref-wide concurrency group applies.
+    defaults:
+      run:
+        shell: bash
+    env:
+      ROLLOUT_COUNT: "150"
+      ROLLOUT_GATE_RETRIES: "5"
+      ROLLOUT_GATE_INTERVAL_SECONDS: "10"
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Start queue, legacy, new service and router
+        run: |
+          cp .env.example .env
+          docker compose up -d --build --wait elasticmq legacy-db legacy legacy-worker new-db new router
+
+      - name: Wait for the queues to exist
+        run: |
+          for queue in charges-incoming charges-legacy charges-new charges-new-dlq; do
+            for attempt in $(seq 1 30); do
+              curl -fsS "http://localhost:9324/?Action=ListQueues" | grep -q "${queue}" && continue 2
+              sleep 2
+            done
+            echo "elasticmq did not expose ${queue}" >&2
+            exit 1
+          done
+
+      - name: Stage shadow
+        run: pnpm rollout shadow
+
+      - name: Stage 10%
+        run: pnpm rollout 10
+
+      - name: Stage 50%
+        run: pnpm rollout 50
+
+      - name: Stage 100%
+        run: pnpm rollout 100
+
+      - name: Stage new
+        run: pnpm rollout new
+
+      - name: A failing stage rolls back to the previous config
+        run: |
+          before="$(jq -c . router/config/routing.json)"
+          docker compose stop new
+          if ROLLOUT_DRAIN_TIMEOUT_SECONDS=20 ROLLOUT_FLOW_TIMEOUT_SECONDS=20 pnpm rollout 100; then
+            echo "rollout 100 passed with the new service stopped" >&2
+            exit 1
+          fi
+          after="$(jq -c . router/config/routing.json)"
+          echo "before=${before} after=${after}"
+          test "${before}" = "${after}"
+
+      - name: Rollout summary
+        if: always() && hashFiles('reports/rollout-*.md') != ''
+        run: |
+          for report in reports/rollout-*.md; do
+            cat "${report}"
+            echo
+          done >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Service logs
+        if: failure()
+        run: docker compose logs --no-color
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: rollout-report
+          path: |
+            reports/rollout-*
+            reports/audit-*
+            reports/shadow-*
+          if-no-files-found: ignore
+
+      - name: Stop services
+        if: always()
+        run: docker compose down -v
