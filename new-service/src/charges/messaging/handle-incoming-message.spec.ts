@@ -105,6 +105,8 @@ describe('incoming message handler', () => {
     ['malformed JSON', '{broken'],
     ['a payload the HTTP schema rejects', chargeBody({ amountCents: -1 })],
     ['a JSON that is not an object', '42'],
+    ['an unknown payment method', chargeBody({ paymentMethod: 'cash' })],
+    ['a null payment method', chargeBody({ paymentMethod: null })],
   ])('flags %s as invalid without touching the use case', async (_name, body) => {
     const { handle, executed, logs } = build();
 

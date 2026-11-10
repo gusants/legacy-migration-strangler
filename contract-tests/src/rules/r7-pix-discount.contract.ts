@@ -77,7 +77,7 @@ describe('R7 — Pix discount', () => {
       fc.asyncProperty(
         fc.oneof(
           fc.integer({ min: 1, max: 10_000_000_000 }),
-          fc.integer({ min: 0, max: 100_000_000 }).map((n) => 10 * n + 5),
+          fc.integer({ min: 0, max: 100_000_000 }).map((n) => 20 * n + 10),
         ),
         fc.integer({ min: -30, max: 0 }),
         async (amountCents, days) => {
