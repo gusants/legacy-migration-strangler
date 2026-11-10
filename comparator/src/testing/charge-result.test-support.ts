@@ -9,6 +9,7 @@ export const chargeResult = (overrides: Partial<ChargeResult> = {}): ChargeResul
   daysLate: 10,
   fineCents: 200,
   interestCents: 100,
+  discountCents: 0,
   totalCents: 10_300,
   payload: { amountCents: 10_000, planType: 'monthly' },
   recordedAt: RECORDED_AT,

@@ -37,7 +37,7 @@ describe('renderMarkdown', () => {
     expect(markdown).toContain('| R3 | 0 | 1 |');
     expect(markdown).toContain('### Unexpected divergences');
     expect(markdown).toContain('- `run_9` — rules: R3; fields: fineCents');
-    expect(markdown).toContain('  - legacy: chargeId=ch_run_1 status=paid_late daysLate=10 fine=200 interest=100 total=10300');
+    expect(markdown).toContain('  - legacy: chargeId=ch_run_1 status=paid_late daysLate=10 fine=200 interest=100 discount=0 total=10300');
     expect(markdown).toContain('fine=201');
   });
 

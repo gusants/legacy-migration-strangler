@@ -75,6 +75,19 @@ describe('shadow comparison against real databases', () => {
     });
   });
 
+  it('reports a Pix discount only the shadow applied as R7 while the legacy reader still returns zero', async () => {
+    await seedBoth(result('pix', '1'), { discountCents: 500, totalCents: 10_300 - 500 });
+
+    const { report, verdict } = await compare({ runId: 'pix' });
+
+    expect(verdict.status).toBe('FAILED');
+    expect(report.byRule).toEqual([{ rule: 'R7', expected: 0, unexpected: 1 }]);
+    expect(report.examples.divergentUnexpected[0]).toMatchObject({
+      legacy: { discountCents: 0 },
+      shadow: { discountCents: 500 },
+    });
+  });
+
   it('treats a total clamped by the legacy INT column as the expected L2 divergence', async () => {
     const bigTotal = 3_000_000_000;
     await seedBoth(result('clamp', '1', { totalCents: bigTotal, payload: { amountCents: 2_900_000_000, planType: 'monthly' } }));

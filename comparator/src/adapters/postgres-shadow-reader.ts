@@ -7,7 +7,7 @@ import { escapeLikePattern, parsePayload } from './payload.js';
 export type ResultsTable = 'charge_results_shadow' | 'charge_results';
 
 const selectResults = (table: ResultsTable): string => `
-  SELECT message_id, charge_id, status, days_late, fine_cents, interest_cents, total_cents, payload, created_at
+  SELECT message_id, charge_id, status, days_late, fine_cents, interest_cents, discount_cents, total_cents, payload, created_at
   FROM ${table}`;
 
 type ShadowRow = {
@@ -17,6 +17,7 @@ type ShadowRow = {
   days_late: number;
   fine_cents: string;
   interest_cents: string;
+  discount_cents: string;
   total_cents: string;
   payload: unknown;
   created_at: Date;
@@ -34,6 +35,7 @@ const toChargeResult = (row: ShadowRow): ChargeResult => ({
   daysLate: Number(row.days_late),
   fineCents: Number(row.fine_cents),
   interestCents: Number(row.interest_cents),
+  discountCents: Number(row.discount_cents),
   totalCents: Number(row.total_cents),
   payload: parsePayload(row.payload),
   recordedAt: row.created_at,

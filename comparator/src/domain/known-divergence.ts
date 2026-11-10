@@ -27,7 +27,7 @@ const conditionSchema: z.ZodType<Condition> = z.lazy(() =>
   ]),
 );
 
-const ruleSchema = z.enum(['R1', 'R2', 'R3', 'R4/R5', 'R6', 'chargeId', 'total']);
+const ruleSchema = z.enum(['R1', 'R2', 'R3', 'R4/R5', 'R6', 'R7', 'chargeId', 'total']);
 
 const baseShape = {
   id: z.string().min(1),
