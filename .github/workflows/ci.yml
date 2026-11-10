@@ -344,17 +344,25 @@ jobs:
       - name: Stage new
         run: pnpm rollout new
 
-      - name: A failing stage rolls back to the previous config
+      - name: A failing stage rolls back to the previous config and says why
         run: |
           before="$(jq -c . router/config/routing.json)"
+          existing_reports="$(ls reports/rollout-*-100.md)"
           docker compose stop new
-          if ROLLOUT_DRAIN_TIMEOUT_SECONDS=20 ROLLOUT_FLOW_TIMEOUT_SECONDS=20 pnpm rollout 100; then
-            echo "rollout 100 passed with the new service stopped" >&2
-            exit 1
-          fi
+          code=0
+          ROLLOUT_DRAIN_TIMEOUT_SECONDS=20 ROLLOUT_FLOW_TIMEOUT_SECONDS=20 pnpm rollout 100 || code=$?
           after="$(jq -c . router/config/routing.json)"
-          echo "before=${before} after=${after}"
+          echo "exit=${code} before=${before} after=${after}"
+          test "${code}" -eq 1
           test "${before}" = "${after}"
+          report="$(comm -13 <(echo "${existing_reports}") <(ls reports/rollout-*-100.md))"
+          test -n "${report}"
+          test "$(echo "${report}" | wc -l)" -eq 1
+          cat "${report}"
+          grep -Fx "Outcome: ROLLED_BACK (reason: verify:flow FAILED)" "${report}"
+
+      - name: Rollback history, stage parsing and restore failures
+        run: ./scripts/verify-rollout-rollback.sh
 
       - name: Rollout summary
         if: always() && hashFiles('reports/rollout-*.md') != ''
