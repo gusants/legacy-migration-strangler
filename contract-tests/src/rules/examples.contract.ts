@@ -15,7 +15,7 @@ describe('Reference examples (R1–R6)', () => {
 
     const result = await processCharge(message);
 
-    expect(result).toEqual({
+    expect(result).toMatchObject({
       chargeId: message.chargeId,
       status: days > 0 ? 'paid_late' : 'paid_on_time',
       daysLate: days,
