@@ -31,6 +31,7 @@ services:
 
   legacy:
     build: ./legacy-service
+    profiles: [legacy]
     restart: unless-stopped
     environment:
       CI_ENV: ${LEGACY_CI_ENV:-development}
@@ -49,6 +50,7 @@ services:
 
   legacy-worker:
     build: ./legacy-service
+    profiles: [legacy]
     init: true
     restart: unless-stopped
     working_dir: /var/www/html

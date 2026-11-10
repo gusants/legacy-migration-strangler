@@ -71,7 +71,7 @@ jobs:
 
       - name: Service logs
         if: failure()
-        run: docker compose logs --no-color
+        run: docker compose --profile legacy logs --no-color
 
       - uses: actions/upload-artifact@v4
         if: always()
@@ -205,11 +205,11 @@ jobs:
 
       - name: Service logs
         if: failure()
-        run: docker compose logs --no-color
+        run: docker compose --profile legacy logs --no-color
 
       - name: Stop services
         if: always()
-        run: docker compose down -v
+        run: docker compose --profile legacy down -v
 
   shadow-run:
     name: shadow run (legacy x new comparison)
@@ -275,7 +275,7 @@ jobs:
 
       - name: Service logs
         if: failure()
-        run: docker compose logs --no-color
+        run: docker compose --profile legacy logs --no-color
 
       - uses: actions/upload-artifact@v4
         if: always()
@@ -286,7 +286,7 @@ jobs:
 
       - name: Stop services
         if: always()
-        run: docker compose down -v
+        run: docker compose --profile legacy down -v
 
   rollout:
     name: rollout (shadow, 10, 50, 100, new)
@@ -341,6 +341,13 @@ jobs:
       - name: Stage 100%
         run: pnpm rollout 100
 
+      - name: The legacy shutdown refuses before the router is in mode new
+        run: |
+          code=0
+          SHUTDOWN_QUIET_SECONDS=0 pnpm legacy:shutdown || code=$?
+          test "${code}" -eq 1
+          test -n "$(docker compose ps --status running --services legacy legacy-worker)"
+
       - name: Stage new
         run: pnpm rollout new
 
@@ -364,6 +371,20 @@ jobs:
       - name: Rollback history, stage parsing and restore failures
         run: ./scripts/verify-rollout-rollback.sh
 
+      - name: Shut the legacy down
+        run: |
+          docker compose start new
+          ./scripts/wait-queue-drained.sh charges-new 120
+          pnpm legacy:shutdown
+          test -z "$(docker compose ps --status running --services legacy legacy-worker)"
+          report="$(ls reports/legacy-shutdown-*.md | sort | tail -n 1)"
+          cat "${report}"
+          grep -Fx "Outcome: STOPPED" "${report}"
+
+      - name: Legacy shutdown summary
+        if: always() && hashFiles('reports/legacy-shutdown-*.md') != ''
+        run: cat reports/legacy-shutdown-*.md >> "$GITHUB_STEP_SUMMARY"
+
       - name: Rollout summary
         if: always() && hashFiles('reports/rollout-*.md') != ''
         run: |
@@ -374,7 +395,7 @@ jobs:
 
       - name: Service logs
         if: failure()
-        run: docker compose logs --no-color
+        run: docker compose --profile legacy logs --no-color
 
       - uses: actions/upload-artifact@v4
         if: always()
@@ -382,10 +403,11 @@ jobs:
           name: rollout-report
           path: |
             reports/rollout-*
+            reports/legacy-shutdown-*
             reports/audit-*
             reports/shadow-*
           if-no-files-found: ignore
 
       - name: Stop services
         if: always()
-        run: docker compose down -v
+        run: docker compose --profile legacy down -v

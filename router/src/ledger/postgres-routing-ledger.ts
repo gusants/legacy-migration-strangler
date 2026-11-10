@@ -44,10 +44,15 @@ export class PostgresRoutingLedger implements RoutingLedger {
     if (inserted.rows[0]) {
       return inserted.rows[0].service;
     }
-    const recorded = await this.pool.query<ServiceRow>(SELECT_RECORDED, [messageKey]);
-    if (!recorded.rows[0]) {
+    const recorded = await this.recordedServiceOf(messageId);
+    if (!recorded) {
       throw new Error(`routing ledger has no record for message key "${messageKey}" after a conflict`);
     }
-    return recorded.rows[0].service;
+    return recorded;
+  }
+
+  async recordedServiceOf(messageId: string): Promise<QueueTarget | undefined> {
+    const recorded = await this.pool.query<ServiceRow>(SELECT_RECORDED, [ledgerMessageKeyOf(messageId)]);
+    return recorded.rows[0]?.service;
   }
 }

@@ -7,7 +7,8 @@
   },
   "scripts": {
     "infra:up": "docker compose up -d --wait",
-    "infra:down": "docker compose down",
+    "infra:up:legacy": "docker compose --profile legacy up -d --wait",
+    "infra:down": "docker compose --profile legacy down",
     "test:contract:legacy": "TARGET_URL=http://localhost:${LEGACY_PORT:-8080} pnpm --filter contract-tests test",
     "test:contract:new": "TARGET_URL=http://localhost:${NEW_PORT:-3000} pnpm --filter contract-tests test",
     "legacy:lint": "docker compose exec -T legacy sh -c \"find application -name '*.php' -print0 | xargs -0 -n1 php -l > /dev/null && echo php lint ok\"",
@@ -18,6 +19,8 @@
     "compare": "pnpm --filter comparator compare",
     "exactly-once": "pnpm --filter comparator exactly-once",
     "rollout": "./scripts/rollout.sh",
-    "redrive": "pnpm --filter router redrive"
+    "redrive": "pnpm --filter router redrive",
+    "legacy:shutdown": "./scripts/shutdown-legacy.sh",
+    "legacy-pins": "pnpm --filter router legacy-pins"
   }
 }
