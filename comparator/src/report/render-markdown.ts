@@ -26,7 +26,7 @@ const table = (header: readonly string[], rows: readonly (readonly (string | num
 const describeResult = (result: ChargeResult | null): string =>
   result === null
     ? '(no row)'
-    : `chargeId=${result.chargeId} status=${result.status} daysLate=${result.daysLate} fine=${result.fineCents} interest=${result.interestCents} total=${result.totalCents}`;
+    : `chargeId=${result.chargeId} status=${result.status} daysLate=${result.daysLate} fine=${result.fineCents} interest=${result.interestCents} discount=${result.discountCents} total=${result.totalCents}`;
 
 const describeExample = (example: Example): string[] => {
   const labels = [

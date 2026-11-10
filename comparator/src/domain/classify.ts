@@ -1,6 +1,6 @@
 import { COMPARED_FIELDS, type ChargeResult, type ComparedField } from './charge-result.js';
 
-export type Rule = 'R1' | 'R2' | 'R3' | 'R4/R5' | 'R6' | 'chargeId' | 'total';
+export type Rule = 'R1' | 'R2' | 'R3' | 'R4/R5' | 'R6' | 'R7' | 'chargeId' | 'total';
 
 const YEARLY_GRACE_MIN_DAYS_LATE = 1;
 const YEARLY_GRACE_MAX_DAYS_LATE = 4;
@@ -11,6 +11,7 @@ const ruleOfField: Record<Exclude<ComparedField, 'totalCents'>, (onGraceBoundary
   daysLate: () => 'R1',
   fineCents: (onGraceBoundary) => (onGraceBoundary ? 'R2' : 'R3'),
   interestCents: (onGraceBoundary) => (onGraceBoundary ? 'R2' : 'R4/R5'),
+  discountCents: () => 'R7',
 };
 
 export const divergentFields = (legacy: ChargeResult, shadow: ChargeResult): ComparedField[] =>

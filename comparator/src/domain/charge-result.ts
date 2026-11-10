@@ -4,6 +4,7 @@ export const COMPARED_FIELDS = [
   'daysLate',
   'fineCents',
   'interestCents',
+  'discountCents',
   'totalCents',
 ] as const;
 
@@ -18,6 +19,7 @@ export type ChargeResult = {
   daysLate: number;
   fineCents: number;
   interestCents: number;
+  discountCents: number;
   totalCents: number;
   payload: Payload | null;
   recordedAt: Date;

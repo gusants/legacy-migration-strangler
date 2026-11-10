@@ -15,6 +15,7 @@ describe('divergentFields', () => {
       daysLate: 0,
       fineCents: 0,
       interestCents: 0,
+      discountCents: 500,
       totalCents: 1,
       payload: null,
       recordedAt: new Date(0),
@@ -26,6 +27,7 @@ describe('divergentFields', () => {
       'daysLate',
       'fineCents',
       'interestCents',
+      'discountCents',
       'totalCents',
     ]);
   });
@@ -41,6 +43,7 @@ describe('classifyRules', () => {
     [['status'], 'R6'],
     [['fineCents'], 'R3'],
     [['interestCents'], 'R4/R5'],
+    [['discountCents'], 'R7'],
     [['chargeId'], 'chargeId'],
   ] as const)('maps %s outside the yearly grace boundary to %s', (fields, rule) => {
     expect(classifyRules(fields, chargeResult())).toEqual([rule]);
@@ -68,6 +71,10 @@ describe('classifyRules', () => {
 
   it.each([0, 5])('does not treat a yearly plan %i days late as the grace boundary', (daysLate) => {
     expect(classifyRules(['fineCents', 'interestCents'], yearly(daysLate))).toEqual(['R3', 'R4/R5']);
+  });
+
+  it('keeps a discount divergence on R7 even on the yearly grace boundary', () => {
+    expect(classifyRules(['discountCents'], yearly(2))).toEqual(['R7']);
   });
 
   it('does not treat a monthly plan as the grace boundary', () => {

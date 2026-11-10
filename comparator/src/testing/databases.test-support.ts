@@ -15,6 +15,7 @@ const LEGACY_SCHEMA = join(REPOSITORY_ROOT, 'legacy-service/sql/schema.sql');
 const MIGRATIONS_DIRECTORY = join(REPOSITORY_ROOT, 'new-service/prisma/migrations');
 const SHADOW_MIGRATION_SUFFIX = '_create_charge_results_shadow';
 const OFFICIAL_MIGRATION_SUFFIX = '_create_charge_results';
+const DISCOUNT_MIGRATION_SUFFIX = '_add_discount_cents';
 const ROUTING_LEDGER_DDL = `
   CREATE SCHEMA IF NOT EXISTS router;
   CREATE TABLE IF NOT EXISTS router.routing_ledger (
@@ -85,13 +86,14 @@ export const startDatabases = async (): Promise<TestDatabases> => {
   await withPostgres(shadow, async (client) => {
     await client.query(migration(OFFICIAL_MIGRATION_SUFFIX));
     await client.query(migration(SHADOW_MIGRATION_SUFFIX));
+    await client.query(migration(DISCOUNT_MIGRATION_SUFFIX));
   });
   await withPostgres(ledger, (client) => client.query(ROUTING_LEDGER_DDL));
 
   const insertResult = (table: 'charge_results' | 'charge_results_shadow', result: ChargeResult): Promise<void> =>
     withPostgres(shadow, async (client) => {
       await client.query(
-        `INSERT INTO ${table} (message_id, charge_id, status, days_late, fine_cents, interest_cents, total_cents, payload, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+        `INSERT INTO ${table} (message_id, charge_id, status, days_late, fine_cents, interest_cents, discount_cents, total_cents, payload, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
         [
           result.messageId,
           result.chargeId,
@@ -99,6 +101,7 @@ export const startDatabases = async (): Promise<TestDatabases> => {
           result.daysLate,
           result.fineCents,
           result.interestCents,
+          result.discountCents,
           result.totalCents,
           JSON.stringify(result.payload),
           result.recordedAt,
