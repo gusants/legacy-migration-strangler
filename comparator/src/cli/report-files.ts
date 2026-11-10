@@ -10,3 +10,5 @@ export const fileSafeRunId = (runId: string): string => {
 
 export const reportBaseName = ({ scope, generatedAt }: Report): string =>
   `shadow-${'runId' in scope ? fileSafeRunId(scope.runId) : generatedAt.replace(TIMESTAMP_UNSAFE_CHARACTERS, '-')}`;
+
+export const exactlyOnceReportBaseName = (runId: string): string => `audit-${fileSafeRunId(runId)}`;

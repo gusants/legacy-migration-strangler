@@ -10,7 +10,8 @@
     "test": "vitest run",
     "test:cov": "vitest run --coverage",
     "test:integration": "vitest run --config ./vitest.config.integration.ts",
-    "compare": "tsx src/tools/compare.ts"
+    "compare": "tsx src/tools/compare.ts",
+    "exactly-once": "tsx src/tools/exactly-once.ts"
   },
   "dependencies": {
     "mysql2": "^3.24.6",

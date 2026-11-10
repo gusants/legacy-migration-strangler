@@ -16,6 +16,7 @@
     "verify:flow": "pnpm --filter router verify:flow",
     "routing:set": "pnpm --filter router routing:set",
     "compare": "pnpm --filter comparator compare",
+    "exactly-once": "pnpm --filter comparator exactly-once",
     "redrive": "pnpm --filter router redrive"
   }
 }

@@ -2,7 +2,8 @@ import { RECORDED_AT } from '../testing/charge-result.test-support.js';
 import { buildReport } from '../report/report.js';
 import { parseCompareOptions } from './compare-options.js';
 import { loadDatabaseEnvironment } from './database-environment.js';
-import { reportBaseName } from './report-files.js';
+import { exactlyOnceReportBaseName, reportBaseName } from './report-files.js';
+import { parseExactlyOnceOptions } from './exactly-once-options.js';
 
 describe('parseCompareOptions', () => {
   it('reads a run id with the default settle window', () => {
@@ -72,5 +73,41 @@ describe('reportBaseName', () => {
     const report = buildReport([], { generatedAt, scope: { since: 'x' }, settleSeconds: 30 });
 
     expect(reportBaseName(report)).toBe('shadow-2026-11-09T12-00-00-000Z');
+  });
+});
+
+describe('parseExactlyOnceOptions', () => {
+  it('reads the run id, the expected count and the default settle window', () => {
+    expect(parseExactlyOnceOptions(['--run-id', 'abc', '--expected-count', '300'])).toEqual({
+      runId: 'abc',
+      expectedCount: 300,
+      settleSeconds: 30,
+    });
+  });
+
+  it('reads a custom settle window', () => {
+    expect(parseExactlyOnceOptions(['--run-id', 'a', '--expected-count', '1', '--settle-seconds', '0']).settleSeconds).toBe(0);
+  });
+
+  it.each([
+    [['--expected-count', '3'], '--run-id is required'],
+    [['--run-id', 'a'], '--expected-count is required'],
+    [['--run-id', 'a', '--expected-count', '0'], 'at least 1'],
+    [['--run-id', 'a', '--expected-count', '1.5'], 'non-negative integer'],
+    [['--run-id', 'a', '--expected-count', ' '], 'non-negative integer'],
+    [['--run-id', 'a', '--expected-count', '1', '--settle-seconds=-1'], 'non-negative integer'],
+    [['--run-id', '../x', '--expected-count', '1'], 'run id must contain only'],
+  ])('rejects %j', (argv, message) => {
+    expect(() => parseExactlyOnceOptions(argv)).toThrow(message);
+  });
+});
+
+describe('exactlyOnceReportBaseName', () => {
+  it('prefixes the safe run id', () => {
+    expect(exactlyOnceReportBaseName('run42')).toBe('audit-run42');
+  });
+
+  it('rejects an unsafe run id', () => {
+    expect(() => exactlyOnceReportBaseName('a/b')).toThrow('run id must contain only');
   });
 });

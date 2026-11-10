@@ -21,6 +21,7 @@ In `shadow` mode the legacy stays the official answer while a copy of every mess
 pnpm routing:set shadow
 pnpm verify:flow --count 500          # prints the run id
 pnpm compare --run-id <run id>        # exit 0 PASSED, 1 FAILED, 2 INCONCLUSIVE (3 aborted)
+pnpm exactly-once --run-id <run id> --expected-count <n>   # same exit codes: every message exactly once in the official tables
 pnpm routing:set legacy
 ```
 
@@ -67,3 +68,14 @@ The verdict is printed in the report and in the `RESULT:` line, and is the exit 
 An exit code of 3 means the comparator aborted (bad arguments, database unreachable).
 
 Use `--since <ISO date>` instead of `--run-id` to compare a time window, and `--settle-seconds <n>` (default 30) to control how long one-sided messages are kept as pending. The run id may contain only letters, digits, `_` and `-`.
+
+### Exactly-once audit
+
+`pnpm exactly-once --run-id <run id> --expected-count <n>` checks the outcome of a routed run, whatever the routing mode. It reads only the official tables (MariaDB `charge_results` and Postgres `charge_results`; the shadow table is ignored) and the `router.routing_ledger`, and fails when:
+
+- an expected message (`<run>_0` to `<run>_<n-1>`) is missing from both official tables;
+- a message appears more than once in the union of the official tables (in two services, or twice in one);
+- a message sits in a service other than the one the ledger recorded for it, or has no ledger record;
+- an official message of the run is outside the expected set.
+
+The one known exception is C1 (amount above 1e12 in `new` mode, dead-lettered by design): a message with no official result is accepted only when the ledger says `new` and the router logged it with the reason `amount_above_new_service_limit_will_dead_letter`. A missing message that was claimed by the router less than `--settle-seconds` ago (or not claimed yet) is pending, which makes the verdict INCONCLUSIVE (exit 2). Reports go to `reports/audit-<run id>.md` and `.json`.

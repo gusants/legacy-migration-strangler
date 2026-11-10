@@ -7,24 +7,36 @@ import { createConnection } from 'mysql2/promise';
 import pg from 'pg';
 import type { DatabaseConnection } from '../cli/database-environment.js';
 import type { ChargeResult } from '../domain/charge-result.js';
+import type { LedgerEntry } from '../domain/exactly-once.js';
 
 const REPOSITORY_ROOT = fileURLToPath(new URL('../../../', import.meta.url));
 const LEGACY_SCHEMA = join(REPOSITORY_ROOT, 'legacy-service/sql/schema.sql');
 const MIGRATIONS_DIRECTORY = join(REPOSITORY_ROOT, 'new-service/prisma/migrations');
 const SHADOW_MIGRATION_SUFFIX = '_create_charge_results_shadow';
+const OFFICIAL_MIGRATION_SUFFIX = '_create_charge_results';
+const ROUTING_LEDGER_DDL = `
+  CREATE SCHEMA IF NOT EXISTS router;
+  CREATE TABLE IF NOT EXISTS router.routing_ledger (
+    message_id   text PRIMARY KEY,
+    service      text NOT NULL CHECK (service IN ('legacy', 'new')),
+    routing_mode text NOT NULL,
+    created_at   timestamptz NOT NULL DEFAULT now()
+  )`;
 
 export type TestDatabases = {
   legacy: DatabaseConnection;
   shadow: DatabaseConnection;
   insertLegacy(result: ChargeResult, rawPayload?: string): Promise<void>;
   insertShadow(result: ChargeResult): Promise<void>;
+  insertOfficial(result: ChargeResult): Promise<void>;
+  insertLedger(entry: LedgerEntry): Promise<void>;
   reset(): Promise<void>;
   stop(): Promise<void>;
 };
 
-const shadowMigration = (): string => {
-  const directory = readdirSync(MIGRATIONS_DIRECTORY).find((name) => name.endsWith(SHADOW_MIGRATION_SUFFIX));
-  if (!directory) throw new Error('shadow migration not found');
+const migration = (suffix: string): string => {
+  const directory = readdirSync(MIGRATIONS_DIRECTORY).find((name) => name.endsWith(suffix));
+  if (!directory) throw new Error(`migration ending in ${suffix} not found`);
   return readFileSync(join(MIGRATIONS_DIRECTORY, directory, 'migration.sql'), 'utf8');
 };
 
@@ -60,7 +72,29 @@ export const startDatabases = async (): Promise<TestDatabases> => {
   const legacyConnection = await createConnection(legacy);
   await legacyConnection.query(readFileSync(LEGACY_SCHEMA, 'utf8'));
   await legacyConnection.end();
-  await withPostgres(shadow, (client) => client.query(shadowMigration()));
+  await withPostgres(shadow, async (client) => {
+    await client.query(migration(OFFICIAL_MIGRATION_SUFFIX));
+    await client.query(migration(SHADOW_MIGRATION_SUFFIX));
+    await client.query(ROUTING_LEDGER_DDL);
+  });
+
+  const insertResult = (table: 'charge_results' | 'charge_results_shadow', result: ChargeResult): Promise<void> =>
+    withPostgres(shadow, async (client) => {
+      await client.query(
+        `INSERT INTO ${table} (message_id, charge_id, status, days_late, fine_cents, interest_cents, total_cents, payload, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+        [
+          result.messageId,
+          result.chargeId,
+          result.status,
+          result.daysLate,
+          result.fineCents,
+          result.interestCents,
+          result.totalCents,
+          JSON.stringify(result.payload),
+          result.recordedAt,
+        ],
+      );
+    });
 
   return {
     legacy,
@@ -83,28 +117,20 @@ export const startDatabases = async (): Promise<TestDatabases> => {
       );
       await connection.end();
     },
-    insertShadow: (result) =>
+    insertShadow: (result) => insertResult('charge_results_shadow', result),
+    insertOfficial: (result) => insertResult('charge_results', result),
+    insertLedger: (entry) =>
       withPostgres(shadow, async (client) => {
         await client.query(
-          'INSERT INTO charge_results_shadow (message_id, charge_id, status, days_late, fine_cents, interest_cents, total_cents, payload, created_at, received_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $9)',
-          [
-            result.messageId,
-            result.chargeId,
-            result.status,
-            result.daysLate,
-            result.fineCents,
-            result.interestCents,
-            result.totalCents,
-            JSON.stringify(result.payload),
-            result.recordedAt,
-          ],
+          'INSERT INTO router.routing_ledger (message_id, service, routing_mode, created_at) VALUES ($1, $2, $3, $4)',
+          [entry.messageId, entry.service, entry.routingMode, entry.claimedAt],
         );
       }),
     reset: async () => {
       const connection = await createConnection(legacy);
       await connection.query('TRUNCATE TABLE charge_results');
       await connection.end();
-      await withPostgres(shadow, (client) => client.query('TRUNCATE TABLE charge_results_shadow'));
+      await withPostgres(shadow, (client) => client.query('TRUNCATE TABLE charge_results, charge_results_shadow, router.routing_ledger'));
     },
     stop: async () => {
       await Promise.all([mariadb.stop(), postgres.stop()]);
