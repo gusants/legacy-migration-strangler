@@ -43,6 +43,11 @@ class Charges extends CI_Controller {
 			if (!isset($dados['failedAttempts']) || !is_int($dados['failedAttempts']) || $dados['failedAttempts'] < 0) {
 				$ok = false;
 			}
+			if (array_key_exists('paymentMethod', $dados)) {
+				if (!is_string($dados['paymentMethod']) || !in_array($dados['paymentMethod'], array('pix', 'boleto', 'card'), true)) {
+					$ok = false;
+				}
+			}
 		}
 		if (!$ok) {
 			$this->output
@@ -62,6 +67,7 @@ class Charges extends CI_Controller {
 					'daysLate' => (int) $ja['days_late'],
 					'fineCents' => (int) $ja['fine_cents'],
 					'interestCents' => (int) $ja['interest_cents'],
+					'discountCents' => (int) $ja['discount_cents'],
 					'totalCents' => (int) $ja['total_cents']
 				)));
 			return;
@@ -103,7 +109,14 @@ class Charges extends CI_Controller {
 			}
 		}
 
-		$total = $valor + $multa + $juros;
+		$desconto = 0;
+		if (isset($dados['paymentMethod']) && $dados['paymentMethod'] == 'pix') {
+			if ($status == 'paid_on_time') {
+				$desconto = round($valor * 0.05, 2);
+			}
+		}
+
+		$total = $valor + $multa + $juros - $desconto;
 
 		$resultado = array(
 			'chargeId' => $dados['chargeId'],
@@ -111,6 +124,7 @@ class Charges extends CI_Controller {
 			'daysLate' => $dias,
 			'fineCents' => (int) round($multa * 100),
 			'interestCents' => (int) round($juros * 100),
+			'discountCents' => (int) round($desconto * 100),
 			'totalCents' => (int) round($total * 100)
 		);
 
@@ -121,6 +135,7 @@ class Charges extends CI_Controller {
 			'days_late' => $resultado['daysLate'],
 			'fine_cents' => $resultado['fineCents'],
 			'interest_cents' => $resultado['interestCents'],
+			'discount_cents' => $resultado['discountCents'],
 			'total_cents' => $resultado['totalCents'],
 			'payload' => $body
 		));
@@ -134,6 +149,7 @@ class Charges extends CI_Controller {
 				'daysLate' => (int) $ja['days_late'],
 				'fineCents' => (int) $ja['fine_cents'],
 				'interestCents' => (int) $ja['interest_cents'],
+				'discountCents' => (int) $ja['discount_cents'],
 				'totalCents' => (int) $ja['total_cents']
 			);
 		}

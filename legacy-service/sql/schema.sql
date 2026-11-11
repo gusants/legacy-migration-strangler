@@ -6,6 +6,7 @@ CREATE TABLE IF NOT EXISTS charge_results (
   days_late INT NOT NULL,
   fine_cents INT NOT NULL,
   interest_cents INT NOT NULL,
+  discount_cents INT NOT NULL DEFAULT 0,
   total_cents INT NOT NULL,
   payload TEXT NOT NULL,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
