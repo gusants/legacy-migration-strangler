@@ -75,7 +75,7 @@ describe('shadow comparison against real databases', () => {
     });
   });
 
-  it('reports a Pix discount only the shadow applied as R7 while the legacy reader still returns zero', async () => {
+  it('reports a Pix discount only one side applied as R7', async () => {
     await seedBoth(result('pix', '1'), { discountCents: 500, totalCents: 10_300 - 500 });
 
     const { report, verdict } = await compare({ runId: 'pix' });
@@ -86,6 +86,14 @@ describe('shadow comparison against real databases', () => {
       legacy: { discountCents: 0 },
       shadow: { discountCents: 500 },
     });
+  });
+
+  it('reads the legacy discount and finds no divergence when both sides applied it', async () => {
+    await seedBoth(result('pixboth', '1', { discountCents: 500, totalCents: 9_500 }));
+
+    const { verdict } = await compare({ runId: 'pixboth' });
+
+    expect(verdict.status).toBe('PASSED');
   });
 
   it('treats a total clamped by the legacy INT column as the expected L2 divergence', async () => {

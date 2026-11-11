@@ -116,7 +116,7 @@ export const startDatabases = async (): Promise<TestDatabases> => {
     insertLegacy: async (result, rawPayload) => {
       const connection = await createConnection(legacy);
       await connection.query(
-        'INSERT INTO charge_results (message_id, charge_id, status, days_late, fine_cents, interest_cents, total_cents, payload, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, FROM_UNIXTIME(?))',
+        'INSERT INTO charge_results (message_id, charge_id, status, days_late, fine_cents, interest_cents, discount_cents, total_cents, payload, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, FROM_UNIXTIME(?))',
         [
           result.messageId,
           result.chargeId,
@@ -124,6 +124,7 @@ export const startDatabases = async (): Promise<TestDatabases> => {
           result.daysLate,
           result.fineCents,
           result.interestCents,
+          result.discountCents,
           Math.min(result.totalCents, 2_147_483_647),
           rawPayload ?? JSON.stringify(result.payload),
           Math.floor(result.recordedAt.getTime() / 1000),

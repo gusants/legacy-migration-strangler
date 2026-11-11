@@ -5,10 +5,9 @@ import type { DatabaseConnection } from '../cli/database-environment.js';
 import { escapeLikePattern, parsePayload } from './payload.js';
 
 const MILLISECONDS_PER_SECOND = 1000;
-const LEGACY_DISCOUNT_CENTS = 0;
 
 const SELECT_RESULTS = `
-  SELECT message_id, charge_id, status, days_late, fine_cents, interest_cents, total_cents, payload,
+  SELECT message_id, charge_id, status, days_late, fine_cents, interest_cents, discount_cents, total_cents, payload,
          UNIX_TIMESTAMP(created_at) AS created_at_seconds
   FROM charge_results`;
 
@@ -24,7 +23,7 @@ const toChargeResult = (row: RowDataPacket): ChargeResult => ({
   daysLate: Number(row.days_late),
   fineCents: Number(row.fine_cents),
   interestCents: Number(row.interest_cents),
-  discountCents: LEGACY_DISCOUNT_CENTS,
+  discountCents: Number(row.discount_cents),
   totalCents: Number(row.total_cents),
   payload: parsePayload(row.payload),
   recordedAt: new Date(Number(row.created_at_seconds) * MILLISECONDS_PER_SECOND),
