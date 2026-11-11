@@ -21,12 +21,9 @@ jobs:
           - target: legacy
             url: http://localhost:8080
             services: legacy-db legacy
-            # Temporary: the legacy does not implement R7 yet; the legacy PR removes this exclusion.
-            exclude: src/rules/r7-pix-discount.contract.ts
           - target: new
             url: http://localhost:3000
             services: new-db new
-            exclude: ''
     steps:
       - uses: actions/checkout@v5
 
@@ -64,10 +61,9 @@ jobs:
 
       - name: Contract suite
         working-directory: contract-tests
-        run: pnpm vitest run ${EXCLUDE:+--exclude "$EXCLUDE"} --reporter=default --reporter=json --outputFile.json=../reports/contract-${{ matrix.target }}.json
+        run: pnpm vitest run --reporter=default --reporter=json --outputFile.json=../reports/contract-${{ matrix.target }}.json
         env:
           TARGET_URL: ${{ matrix.url }}
-          EXCLUDE: ${{ matrix.exclude }}
 
       - name: Results per rule
         if: always() && hashFiles(format('reports/contract-{0}.json', matrix.target)) != ''
