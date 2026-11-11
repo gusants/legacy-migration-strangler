@@ -23,5 +23,5 @@ export interface ChargeResult {
   fineCents: number;
   interestCents: number;
   totalCents: number;
-  discountCents?: number;
+  discountCents: number;
 }

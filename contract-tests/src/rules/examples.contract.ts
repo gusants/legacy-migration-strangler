@@ -15,12 +15,13 @@ describe('Reference examples (R1–R6)', () => {
 
     const result = await processCharge(message);
 
-    expect(result).toMatchObject({
+    expect(result).toEqual({
       chargeId: message.chargeId,
       status: days > 0 ? 'paid_late' : 'paid_on_time',
       daysLate: days,
       fineCents: fine,
       interestCents: interest,
+      discountCents: 0,
       totalCents: total,
     });
   });
