@@ -9,7 +9,7 @@ Gradual migration of a legacy PHP 5.6 / CodeIgniter 3 billing service to a NestJ
 ```bash
 pnpm install
 cp .env.example .env
-pnpm infra:up
+pnpm infra:up:legacy
 pnpm test:contract:legacy
 ```
 
@@ -91,6 +91,33 @@ The one known exception is C1 (amount above 1e12 in `new` mode, dead-lettered by
 5. treats exit 2 (INCONCLUSIVE) as "wait and repeat", up to `ROLLOUT_GATE_RETRIES` attempts (default 5) spaced `ROLLOUT_GATE_INTERVAL_SECONDS` (default 15) apart. It is never green.
 
 Any failed gate, or a gate still inconclusive after the attempts, restores the previous config automatically and exits non-zero (exit 1; exit 4 when the previous config could not be confirmed after the restore). Every passed stage pushes the config it replaced on `reports/.rollout-history`, and `pnpm rollout --rollback` pops one entry per call, so repeating it walks back one stage at a time. `scripts/verify-rollout-rollback.sh` checks this, the stage parsing (leading zeros are decimal, only 1 to 100 is accepted) and the exit codes without starting any gate. The report of each stage is `reports/rollout-<timestamp>-<stage>.md`: a stable `Outcome: PASSED` or `Outcome: ROLLED_BACK (reason: <gate> <verdict>)` line, config before and after, run id, the real legacy/new split, both verdicts and links to the detailed reports. Because the ledger pins every message to its first destination, moving the percentage back and forth never sends a message to a second service.
+
+## Legacy shutdown
+
+Once the rollout reaches `new`, `pnpm legacy:shutdown` (`scripts/shutdown-legacy.sh`) stops the legacy service and its queue worker. It stops nothing unless all of these hold:
+
+- the router is in mode `new`;
+- `charges-incoming`, `charges-legacy` and `charges-legacy-dlq` are empty, read twice a few seconds apart;
+- no message in `charges-incoming-dlq` has a `legacy` claim in the routing ledger (`pnpm legacy-pins`). A redrive after the shutdown would send such a message to a queue nobody consumes;
+- the latest passed rollout stage is `new` and its exactly-once audit passed;
+- the latest shadow comparison passed.
+
+The script writes `reports/legacy-shutdown-<timestamp>.md`. The legacy code and database stay in the repository. `legacy` and `legacy-worker` live in the compose profile `legacy`, so a plain `docker compose up` keeps them off, and `pnpm infra:up:legacy` brings them back.
+
+## R7: one rule, two pull requests
+
+After the migration a new rule arrived: **R7, Pix discount**. A Pix payment on time gets 5% off, rounded half up like R5. It was implemented in both services in separate pull requests, against the same contract suite (`contract-tests/src/rules/r7-pix-discount.contract.ts`):
+
+| | New service | Legacy |
+|---|---|---|
+| Pull request | [#1 feat(new): R7 pix discount](https://github.com/gusants/legacy-migration-strangler/pull/1) | [#2 feat(legacy): R7 pix discount](https://github.com/gusants/legacy-migration-strangler/pull/2) |
+| Whole PR | 31 files, +275 / −15 | 15 files, +120 / −17 |
+| Service production code | 9 files, +45 / −6 | 1 file, +17 / −1 (plus 1 schema line and 1 `ALTER` script) |
+| Where the rule lives | `discount()`, a 14-line pure function, wired into `processCharge` | 6 edits inside the single `Charges::process` method (validation, replay, calculation, response, insert, second replay) |
+| Unit tests in the service | +87 lines (`discount.spec.ts`, `process-charge.spec.ts`, schema, use case, repository, consumer) | none possible: the only safety net is the black-box contract suite |
+| Schema change | Prisma migration, applied on boot | `schema.sql` for new databases; a manual `ALTER` that must run before the deploy |
+
+The new-service PR is bigger in lines because it carries the contract tests, the comparator support and its own unit tests. The legacy PR is small in lines but every edit lands in the middle of the same 150-line method, with float rounding and no test closer than HTTP.
 
 ## Legacy schema changes
 
