@@ -7,7 +7,7 @@ The contract suite (`contract-tests/`) passes against both services. The cases b
 | # | Case | Legacy (PHP 5.6 / MariaDB) | New (NestJS / Postgres) |
 |---|---|---|---|
 | L1 | Interest on huge amounts (above ~1e13 cents, e.g. `amountCents=18231394917217`, 394 days) | Float rounding drifts 1 cent (`2394389865795`) | Exact integer math (`2394389865794`) |
-| L2 | Replaying a message whose total exceeds 2,147,483,647 cents (~R$ 21 million) | First response is correct; the stored `INT` columns clamp, so the replay returns `totalCents: 2147483647` | `BIGINT` columns, replay returns the original value |
+| L2 | Replaying a message whose total (or fine, interest or R7 discount) exceeds 2,147,483,647 cents (~R$ 21 million) | First response is correct; the stored `INT` columns clamp, so the replay returns `totalCents: 2147483647` | `BIGINT` columns, replay returns the original value |
 | L3 | `messageId` differing only by case, accents or trailing spaces (`MSG-1` vs `msg-1`) | `utf8_general_ci` collation treats them as the same message and returns the first result | Exact comparison, processed as different messages |
 
 ## Contract decisions the new service makes explicit

@@ -12,7 +12,7 @@ The comparator reads the databases, not the HTTP responses, so some of these sur
 
 | Id | What the comparator sees |
 |---|---|
-| L2 | A pair whose legacy `total_cents` (or fine/interest) is exactly 2147483647 while the shadow holds the larger exact value. |
+| L2 | A pair whose legacy `total_cents` (or fine/interest/discount) is exactly 2147483647 while the shadow holds the larger exact value. |
 | L3 | A shadow-only message whose id folds (case, accents, trailing spaces) onto a legacy row. |
 | C1 | A legacy-only message whose payload `amountCents` is above 1e12: the new service rejects it, so it never reaches the shadow table. |
 | L1 | Not reachable in shadow: it needs more than 1e13 cents, and C1 already stops anything above 1e12 in the new service. Such a message shows up as C1 (legacy-only). The matcher is kept so it applies if the cap is ever lifted. |

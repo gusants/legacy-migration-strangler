@@ -108,6 +108,28 @@ describe('shadow comparison against real databases', () => {
     expect(report.examples.divergentExpected[0]?.legacy?.totalCents).toBe(INT_MAX);
   });
 
+  it('treats a Pix discount clamped by the legacy INT column as the expected L2 divergence', async () => {
+    const amountCents = 50_000_000_000;
+    const discountCents = 2_500_000_000;
+    await seedBoth(
+      result('pixclamp', '1', {
+        status: 'paid_on_time',
+        daysLate: 0,
+        fineCents: 0,
+        interestCents: 0,
+        discountCents,
+        totalCents: amountCents - discountCents,
+        payload: { amountCents, planType: 'monthly', paymentMethod: 'pix' },
+      }),
+    );
+
+    const { report, verdict } = await compare({ runId: 'pixclamp' });
+
+    expect(verdict.status).toBe('PASSED');
+    expect(report.byKnownDivergence).toEqual([{ id: 'L2', occurrences: 1 }]);
+    expect(report.examples.divergentExpected[0]?.legacy?.discountCents).toBe(INT_MAX);
+  });
+
   it('reports a message that only the legacy has as unexpected', async () => {
     await databases.insertLegacy(result('legacyonly', '1'));
 
