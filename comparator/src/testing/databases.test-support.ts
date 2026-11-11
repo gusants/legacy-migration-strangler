@@ -124,7 +124,7 @@ export const startDatabases = async (): Promise<TestDatabases> => {
           result.daysLate,
           result.fineCents,
           result.interestCents,
-          result.discountCents,
+          Math.min(result.discountCents, 2_147_483_647),
           Math.min(result.totalCents, 2_147_483_647),
           rawPayload ?? JSON.stringify(result.payload),
           Math.floor(result.recordedAt.getTime() / 1000),

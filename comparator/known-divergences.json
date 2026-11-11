@@ -16,8 +16,8 @@
     "id": "L2",
     "description": "Legacy INT columns clamp values above 2147483647 cents; the new service stores the exact BIGINT value.",
     "scope": "field",
-    "affectedRules": ["R3", "R4/R5", "total"],
-    "explains": ["fineCents", "interestCents", "totalCents"],
+    "affectedRules": ["R3", "R4/R5", "R7", "total"],
+    "explains": ["fineCents", "interestCents", "discountCents", "totalCents"],
     "when": {
       "all": [
         { "op": "eq", "left": { "legacy": "$field" }, "right": { "value": 2147483647 } },

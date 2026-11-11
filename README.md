@@ -91,3 +91,19 @@ The one known exception is C1 (amount above 1e12 in `new` mode, dead-lettered by
 5. treats exit 2 (INCONCLUSIVE) as "wait and repeat", up to `ROLLOUT_GATE_RETRIES` attempts (default 5) spaced `ROLLOUT_GATE_INTERVAL_SECONDS` (default 15) apart. It is never green.
 
 Any failed gate, or a gate still inconclusive after the attempts, restores the previous config automatically and exits non-zero (exit 1; exit 4 when the previous config could not be confirmed after the restore). Every passed stage pushes the config it replaced on `reports/.rollout-history`, and `pnpm rollout --rollback` pops one entry per call, so repeating it walks back one stage at a time. `scripts/verify-rollout-rollback.sh` checks this, the stage parsing (leading zeros are decimal, only 1 to 100 is accepted) and the exit codes without starting any gate. The report of each stage is `reports/rollout-<timestamp>-<stage>.md`: a stable `Outcome: PASSED` or `Outcome: ROLLED_BACK (reason: <gate> <verdict>)` line, config before and after, run id, the real legacy/new split, both verdicts and links to the detailed reports. Because the ledger pins every message to its first destination, moving the percentage back and forth never sends a message to a second service.
+
+## Legacy schema changes
+
+`legacy-service/sql/schema.sql` only runs when the MariaDB data directory is empty, so a change to it does not reach an existing database. Every column the legacy starts to use also ships as an idempotent script in `legacy-service/sql/alter/`. That script must run **before** the controller that uses the column is deployed.
+
+Without the column, the legacy fails in two ways depending on the mode:
+
+- with `CI_ENV=development` it answers 500, so the message goes to the DLQ;
+- with `CI_ENV=production` the failed `INSERT IGNORE` is not detected (`affected_rows()` returns -1 and the code only checks for `0`), so it answers 200 **without storing the result**.
+
+```bash
+docker compose exec -T legacy-db sh -c 'mariadb -u"$MARIADB_USER" -p"$MARIADB_PASSWORD" "$MARIADB_DATABASE"' \
+  < legacy-service/sql/alter/2026_11_11_add_discount_cents.sql
+```
+
+Locally, `docker compose --profile legacy down -v` recreates the database from `schema.sql` instead.
