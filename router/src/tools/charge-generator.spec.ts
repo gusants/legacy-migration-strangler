@@ -54,6 +54,23 @@ describe('generateCharges', () => {
     expect(has((c) => c.paid && c.referenceDate < c.dueDate)).toBe(true);
   });
 
+  it('covers the R7 Pix discount on time, with rounding ties, late, in the grace period and unpaid', () => {
+    const pix = generateCharges(fixedTemplates.length, 1, 'r').filter((c) => c.paymentMethod === 'pix');
+    const onTime = pix.filter((c) => c.paid && c.referenceDate === c.dueDate).map(({ amountCents }) => amountCents);
+
+    expect(onTime).toEqual(expect.arrayContaining([10_000, 10, 30, 9]));
+    expect(pix.some((c) => c.paid && c.referenceDate > c.dueDate && c.planType === 'monthly')).toBe(true);
+    expect(pix.some((c) => c.planType === 'yearly' && c.referenceDate === '2026-10-03')).toBe(true);
+    expect(pix.some((c) => !c.paid)).toBe(true);
+  });
+
+  it('sends a payment method on part of the random charges and leaves it out on others', () => {
+    const random = generateCharges(fixedTemplates.length + 200, 7, 'r').slice(fixedTemplates.length);
+
+    expect(random.some((c) => c.paymentMethod === 'pix')).toBe(true);
+    expect(random.some((c) => c.paymentMethod === undefined)).toBe(true);
+  });
+
   it('includes amounts whose total overflows the legacy 32-bit INT columns', () => {
     const amounts = generateCharges(fixedTemplates.length, 1, 'r').map(({ amountCents }) => amountCents);
 

@@ -7,7 +7,10 @@ export type GeneratedCharge = {
   paid: boolean;
   planType: 'monthly' | 'yearly';
   failedAttempts: number;
+  paymentMethod?: PaymentMethod;
 };
+
+type PaymentMethod = 'pix' | 'boleto' | 'card';
 
 type ChargeTemplate = Omit<GeneratedCharge, 'messageId' | 'chargeId'>;
 
@@ -55,6 +58,17 @@ const boundaryCases: readonly ChargeTemplate[] = [
   template(2_525, '2026-10-02', { planType: 'yearly' }),
 ];
 
+const pixDiscountCases: readonly ChargeTemplate[] = [
+  template(10_000, '2026-10-01', { paymentMethod: 'pix' }),
+  template(10, '2026-10-01', { paymentMethod: 'pix' }),
+  template(30, '2026-10-01', { paymentMethod: 'pix' }),
+  template(9, '2026-10-01', { paymentMethod: 'pix' }),
+  template(10_000, '2026-10-11', { paymentMethod: 'pix' }),
+  template(10_000, '2026-10-03', { planType: 'yearly', paymentMethod: 'pix' }),
+  template(10_000, '2026-10-01', { paid: false, paymentMethod: 'pix' }),
+  template(10_000, '2026-10-01', { paymentMethod: 'boleto' }),
+];
+
 const legacyIntegerOverflowCases: readonly ChargeTemplate[] = [
   template(2_200_000_000, '2026-10-11'),
   template(3_000_000_000, '2026-10-11'),
@@ -64,6 +78,7 @@ export const fixedTemplates: readonly ChargeTemplate[] = [
   ...documentExamples,
   ...boundaryCases,
   ...legacyIntegerOverflowCases,
+  ...pixDiscountCases,
 ];
 
 const mulberry32 = (seed: number): (() => number) => {
@@ -79,6 +94,13 @@ const mulberry32 = (seed: number): (() => number) => {
 const addDays = (isoDate: string, days: number): string =>
   new Date(Date.parse(isoDate) + days * MILLISECONDS_PER_DAY).toISOString().slice(0, 10);
 
+const RANDOM_PAYMENT_METHODS: readonly (PaymentMethod | undefined)[] = [undefined, 'pix', 'pix', 'boleto', 'card'];
+
+const randomPaymentMethod = (random: () => number): Partial<ChargeTemplate> => {
+  const paymentMethod = RANDOM_PAYMENT_METHODS[Math.floor(random() * RANDOM_PAYMENT_METHODS.length)];
+  return paymentMethod === undefined ? {} : { paymentMethod };
+};
+
 const randomTemplate = (random: () => number): ChargeTemplate => {
   const integer = (spread: number): number => Math.floor(random() * spread);
   const dueDate = addDays(RANDOM_DUE_DATE_START, integer(RANDOM_DUE_DATE_SPREAD_DAYS));
@@ -92,6 +114,7 @@ const randomTemplate = (random: () => number): ChargeTemplate => {
     paid: random() < 0.6,
     planType: random() < 0.3 ? 'yearly' : 'monthly',
     failedAttempts: integer(RANDOM_MAX_FAILED_ATTEMPTS + 1),
+    ...randomPaymentMethod(random),
   };
 };
 
